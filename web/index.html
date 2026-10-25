@@ -38,7 +38,9 @@
   "alternateName": "oondraa",
   "url": "https://oondraa.pages.dev/",
   "sameAs": [
-   "https://github.com/oondraa"
+   "https://github.com/oondraa",
+   "https://oondraa.pages.dev/",
+   "https://ko-fi.com/oondraa"
   ]
  }
 }
@@ -206,6 +208,7 @@
   --glass-line: rgba(255, 255, 255, .16);
   --glass-hi: rgba(255, 255, 255, .38);
   --subtle: rgba(255, 255, 255, .07);
+  --kofi: #FF5E5B;
   --subtle-line: rgba(255, 255, 255, .08);
   --well: rgba(0, 0, 0, .25);
   --green: #30D158; --green-ink: #052E12;
@@ -308,6 +311,29 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
   border-radius: 999px; border: 0; font: inherit; font-size: 15px; font-weight: 700; text-decoration: none; cursor: pointer;
 }
 .btn { gap: 8px; }
+/* Ko-fi: a glass pill warmed up with Ko-fi's coral so it stands out next to the download. */
+.btn.kofi {
+  background: color-mix(in srgb, var(--kofi) 22%, rgba(255,255,255,.06)); color: var(--fg);
+  border: 1px solid color-mix(in srgb, var(--kofi) 55%, transparent);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+}
+.btn.kofi svg { color: var(--kofi); }
+.btn.kofi:hover { background: color-mix(in srgb, var(--kofi) 34%, rgba(255,255,255,.06)); box-shadow: 0 8px 36px -8px color-mix(in srgb, var(--kofi) 70%, transparent); }
+.install-side .row { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Shown once a download starts: a thank-you with the Ko-fi link, until closed. */
+.thanks {
+  position: fixed; z-index: 10; left: 50%; bottom: 24px; width: min(560px, calc(100% - 32px));
+  display: flex; align-items: center; gap: 16px; padding: 16px 16px 16px 22px; border-radius: 24px;
+  transform: translate(-50%, 140%); opacity: 0; pointer-events: none;
+  transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .4s;
+}
+.thanks.is-open { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.thanks p { margin: 0; flex: 1; font-size: 15px; line-height: 1.45; color: var(--fg-2); }
+.thanks p b { display: block; color: var(--fg); font-size: 16px; }
+.thanks .btn { height: 42px; padding: 0 18px; }
+.thanks .close { flex: none; width: 34px; height: 34px; border: 0; border-radius: 999px; background: none; color: var(--fg-3); cursor: pointer; display: grid; place-items: center; }
+.thanks .close:hover { color: var(--fg); background: rgba(255,255,255,.1); }
 .fine { margin: 0; font-size: 13px; color: var(--fg-3); }
 .fine code { font-family: var(--mono); font-size: .92em; color: var(--fg-2); }
 .btn.primary { background: var(--green); color: var(--green-ink); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
@@ -507,6 +533,7 @@ footer a:hover { color: var(--fg); }
 footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
+  .thanks { transition: none; }
   .qa .chev { transition: none; }
   .spin, .pulse { animation: none; }
   .drain { animation: none; transform: scaleX(.5); }
@@ -545,6 +572,7 @@ footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display:
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M6 11l6 6 6-6M5 20h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Stáhnout pro Windows
           </a>
+          <a class="btn kofi" href="https://ko-fi.com/oondraa" target="_blank" rel="noopener"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8zM17 9h1.5a2.5 2.5 0 0 1 0 5H17M8 2.5v2.5M12 2.5v2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Podpořit na Ko-fi</a>
           <a class="btn lgb" href="#stavy">Projít stavy</a>
         </div>
         <p class="fine">Jeden soubor <code>ClaudeHUD.exe</code>, nic se neinstaluje · Windows 10 a 11 · <span id="ver">poslední verze</span></p>
@@ -705,10 +733,13 @@ footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display:
           <li><div><b>Sám se aktualizuje.</b> Po zapnutí se podívá na GitHub. Když je venku nová verze, ukáže kartu <b>Aktualizovat</b>. Stáhne ji, ověří kontrolní součet SHA-256 a restartuje se.</div></li>
         </ol>
         <div class="install-side">
+          <div class="row">
           <a class="btn primary" href="https://github.com/oondraa/ClaudeHUD/releases/latest/download/ClaudeHUD.exe">
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M6 11l6 6 6-6M5 20h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Stáhnout ClaudeHUD.exe
           </a>
+          <a class="btn kofi" href="https://ko-fi.com/oondraa" target="_blank" rel="noopener"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8zM17 9h1.5a2.5 2.5 0 0 1 0 5H17M8 2.5v2.5M12 2.5v2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Podpořit na Ko-fi</a>
+          </div>
           <p class="fine"><a href="https://github.com/oondraa/ClaudeHUD/releases">Všechna vydání a kontrolní součty</a></p>
           <div class="term">
             <div class="tb"><span>Ze zdrojáků · PowerShell</span><button type="button" class="lgb" id="copy">Kopírovat</button></div>
@@ -803,9 +834,15 @@ target\release\claudehud.exe</pre>
 
 <footer class="wrap">
   <span>ClaudeHUD · společník pro Claude Code na Windows · <a href="https://github.com/oondraa/ClaudeHUD">GitHub</a></span>
-  <span>Vytvořil <a href="https://oondraa.pages.dev/" rel="author">Ondřej Zajíček (oondraa)</a></span>
+  <span>Vytvořil <a href="https://oondraa.pages.dev/" rel="author">Ondřej Zajíček (oondraa)</a> · <a href="https://ko-fi.com/oondraa" target="_blank" rel="noopener">Ko-fi</a></span>
   <span>Inter a JetBrains Mono pod licencí SIL OFL</span>
 </footer>
+
+<div class="thanks lg" id="thanks" role="status" aria-live="polite">
+  <p><b>Stahování začalo.</b>ClaudeHUD je zdarma. Jestli se ti líbí, můžeš mi koupit kafe.</p>
+  <a class="btn kofi" href="https://ko-fi.com/oondraa" target="_blank" rel="noopener"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8zM17 9h1.5a2.5 2.5 0 0 1 0 5H17M8 2.5v2.5M12 2.5v2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Ko-fi</a>
+  <button class="close" id="thanks-close" type="button" aria-label="Zavřít"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+</div>
 
 <script>
 (function () {
@@ -968,6 +1005,13 @@ target\release\claudehud.exe</pre>
       .then(function (r) { if (r && r.tag_name) document.getElementById('ver').textContent = 'verze ' + r.tag_name.replace(/^v/, ''); })
       .catch(function () {});
   } catch (err) { /* no network */ }
+
+  // After a download starts, thank and point to Ko-fi.
+  var thanks = document.getElementById('thanks');
+  document.querySelectorAll('a[href*="/releases/latest/download/"]').forEach(function (a) {
+    a.addEventListener('click', function () { setTimeout(function () { thanks.classList.add('is-open'); }, 600); });
+  });
+  document.getElementById('thanks-close').addEventListener('click', function () { thanks.classList.remove('is-open'); });
 
   // Copy the install commands.
   var copy = document.getElementById('copy');
