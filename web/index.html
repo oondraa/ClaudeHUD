@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ClaudeHUD</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Skleněný ostrov v pravém dolním rohu Windows, který hlídá tvoje relace Claude Code.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one dark "desktop" world lit by three blurred color fields; glass
+   surfaces float on it exactly like the HUD does over Windows. The hero is the
+   live corner demo; sections below walk through states, cards, quiet and setup. */
+:root {
+  --bg: #0A0D18;
+  --field-blue: #2B3A8F;
+  --field-violet: #7E3AA0;
+  --field-ember: #C2562E;
+  --fg: #FFFFFF;
+  --fg-2: rgba(235, 235, 245, .72);
+  --fg-3: rgba(235, 235, 245, .62);
+  --glass: rgba(30, 32, 44, .40);
+  --glass-line: rgba(255, 255, 255, .16);
+  --glass-hi: rgba(255, 255, 255, .38);
+  --subtle: rgba(255, 255, 255, .07);
+  --subtle-line: rgba(255, 255, 255, .08);
+  --well: rgba(0, 0, 0, .25);
+  --green: #30D158; --green-ink: #052E12;
+  --amber: #FF9F0A; --amber-ink: #3A2200; --amber-text: #FFC266; --code: #FFD9A0;
+  --red: #FF453A; --red-ink: #2B0402;
+  --blue: #0A84FF; --blue-tag: #409CFF;
+  --link: #64D2FF;
+  --sans: "Inter", system-ui, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+a { color: var(--link); }
+a:hover { color: #9BE3FF; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; border-radius: 8px; }
+
+/* The lighting: fixed so every glass surface picks up color as you scroll. */
+.fields { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.fields span { position: absolute; border-radius: 50%; }
+.fields .f1 { width: 900px; height: 900px; left: -260px; top: -340px; background: var(--field-blue); filter: blur(140px); opacity: .75; }
+.fields .f2 { width: 760px; height: 760px; right: -220px; top: 30vh; background: var(--field-violet); filter: blur(150px); opacity: .55; }
+.fields .f3 { width: 700px; height: 700px; left: 30vw; bottom: -460px; background: var(--field-ember); filter: blur(150px); opacity: .42; }
+
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* Glass, as in the design (.lg / .lgb). */
+.lg {
+  position: relative;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(30px) saturate(190%);
+  backdrop-filter: blur(30px) saturate(190%);
+  border: 1px solid var(--glass-line);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 rgba(255,255,255,.06), 0 20px 50px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.25);
+}
+.lg::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(160deg, rgba(255,255,255,.16), rgba(255,255,255,0) 38%);
+}
+.lgb {
+  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28); color: var(--fg); cursor: pointer; font: inherit;
+}
+.lgb:hover { background: rgba(255,255,255,.2); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.75); } }
+@keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.spin { animation: spin 1.1s linear infinite; }
+.pulse { animation: pulse 1.4s ease-in-out infinite; }
+.drain { transform-origin: left; animation: drain 8s linear forwards; }
+
+/* ---------- Header ---------- */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  padding-block: 14px;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 21; background: var(--bg); }
+.top .bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  height: 52px; padding: 0 8px 0 16px; border-radius: 999px;
+}
+.brand { display: flex; align-items: center; gap: 10px; color: var(--fg); text-decoration: none; font-weight: 700; font-size: 15px; letter-spacing: -.01em; }
+.brand .dots { display: flex; gap: 4px; }
+.brand .dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.55); }
+.brand .dots i:nth-child(2) { background: var(--blue); }
+.brand .dots i:nth-child(3) { background: var(--green); }
+.top nav { display: flex; align-items: center; gap: 4px; }
+.top nav a { color: var(--fg-2); text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 12px; border-radius: 999px; }
+.top nav a:hover { color: var(--fg); background: rgba(255,255,255,.08); }
+.top nav a.cta { color: var(--green-ink); background: var(--green); font-weight: 700; box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
+@media (max-width: 760px) { .top nav a:not(.cta) { display: none; } }
+
+/* ---------- Hero ---------- */
+.hero { padding-block: 56px 32px; display: grid; gap: 40px; }
+.hero h1 {
+  margin: 0; font-size: clamp(40px, 7vw, 76px); line-height: 1.02; font-weight: 800;
+  letter-spacing: -.035em; text-wrap: balance; max-width: 14ch;
+}
+.hero h1 em { font-style: normal; color: var(--green); }
+.hero .lede { margin: 0; max-width: 58ch; font-size: clamp(17px, 2vw, 19px); color: var(--fg-2); }
+.hero .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; height: 48px; padding: 0 22px;
+  border-radius: 999px; border: 0; font: inherit; font-size: 15px; font-weight: 700; text-decoration: none; cursor: pointer;
+}
+.btn.primary { background: var(--green); color: var(--green-ink); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
+.btn.primary:hover { color: var(--green-ink); filter: brightness(1.08); }
+.btn.lgb { font-weight: 600; }
+.btn.lgb:hover { color: var(--fg); }
+.hero-copy { display: grid; gap: 22px; }
+
+/* ---------- Demo stage ---------- */
+.demo { display: grid; gap: 14px; }
+.stage-shell { width: 100%; max-width: 100%; aspect-ratio: 1100 / 640; position: relative; border-radius: 22px; overflow: hidden; border: 1px solid rgba(255,255,255,.1); box-shadow: 0 40px 100px rgba(0,0,0,.5); }
+.stage { position: absolute; left: 0; top: 0; width: 1100px; height: 640px; transform-origin: 0 0; background: #0E1120; overflow: hidden; }
+.stage .s-field { position: absolute; border-radius: 50%; }
+.stage .editor { position: absolute; left: 0; top: 0; right: 0; bottom: 48px; background: #15171F; display: flex; flex-direction: column; }
+.stage .titlebar { height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: #1B1E27; border-bottom: 1px solid rgba(255,255,255,.06); }
+.stage .titlebar b { width: 200px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.14); }
+.stage .titlebar span { display: flex; gap: 16px; }
+.stage .titlebar span i { width: 10px; height: 10px; border: 1.5px solid rgba(255,255,255,.4); }
+.stage .ed-body { flex: 1; display: flex; min-height: 0; }
+.stage .files { width: 210px; padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; border-right: 1px solid rgba(255,255,255,.06); }
+.stage .files i, .stage .code i { display: block; height: 7px; border-radius: 4px; }
+.stage .files i { background: rgba(255,255,255,.12); }
+.stage .code { flex: 1; padding: 22px 26px; display: flex; flex-direction: column; gap: 12px; }
+.stage .code i { height: 8px; }
+.stage .taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 48px; background: rgba(22,24,34,.92); border-top: 1px solid rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; gap: 10px; }
+.stage .taskbar i { width: 30px; height: 30px; border-radius: 6px; background: rgba(255,255,255,.1); }
+.stage .taskbar i:first-child { background: rgba(255,255,255,.16); }
+.stage .taskbar .clock { position: absolute; right: 14px; font: 500 11px/1.3 var(--sans); color: var(--fg-2); text-align: right; }
+
+/* HUD pieces (shared by the demo and the gallery below). */
+.hud { font-family: var(--sans); color: var(--fg); }
+.corner { position: absolute; right: 16px; bottom: 60px; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.upper { position: relative; animation: rise .32s cubic-bezier(.2,.8,.2,1); }
+.pill {
+  height: 40px; border-radius: 999px; display: inline-flex; align-items: center; gap: 10px;
+  color: var(--fg); font: inherit; cursor: pointer; white-space: nowrap; padding: 0 16px;
+}
+.pill.p-work { padding: 0 6px 0 12px; }
+.pill.p-done { padding: 0 6px 0 14px; border-color: rgba(48,209,88,.45); }
+.pill.p-wait { padding: 0 16px 0 14px; border-color: rgba(255,159,10,.5); }
+.pill.p-err { padding: 0 16px 0 12px; border-color: rgba(255,69,58,.55); }
+.pill.p-idle { opacity: .3; gap: 6px; }
+.pill.p-idle:hover { opacity: 1; }
+.pill .lbl { font-size: 14px; font-weight: 600; }
+.pill .t { font-family: var(--mono); font-size: 12px; color: var(--fg-3); }
+.pill .t.amber { color: var(--amber-text); }
+.pill .sep { width: 1px; height: 16px; background: rgba(255,255,255,.2); }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.pill .idle-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.45); }
+.pill .mini { height: 28px; padding: 0 12px; border-radius: 999px; background: var(--green); color: var(--green-ink); font-size: 12px; font-weight: 700; display: flex; align-items: center; }
+.stack { display: flex; margin-left: 4px; }
+.av {
+  flex: none; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; position: relative;
+  width: 28px; height: 28px; border-radius: 9px; font-size: 11px; border: 2px solid rgba(20,22,32,.7);
+}
+.stack .av + .av { margin-left: -8px; }
+.av.lg44 { width: 44px; height: 44px; border-radius: 13px; font-size: 15px; border: 0; }
+.av.lg40 { width: 40px; height: 40px; border-radius: 12px; font-size: 14px; border: 0; }
+.c-oz { background: #5E5CE6; } .c-op { background: #BF5AF2; } .c-ch { background: #A2845E; }
+.badge { position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #1C1E28; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
+.badge.ok { background: var(--green); }
+.badge.err { background: var(--red); color: var(--red-ink); }
+.badge.wait { right: -3px; bottom: -3px; width: 16px; height: 16px; background: var(--amber); }
+.check { width: 18px; height: 18px; border-radius: 50%; background: var(--green); display: flex; align-items: center; justify-content: center; flex: none; }
+.bang { width: 18px; height: 18px; border-radius: 50%; background: var(--red); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: var(--red-ink); flex: none; }
+.pdot { width: 10px; height: 10px; border-radius: 50%; background: var(--amber); flex: none; }
+
+.card { width: 400px; max-width: 100%; border-radius: 28px; padding: 14px 14px 18px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.card.perm { padding: 16px; gap: 12px; }
+.card .head { display: flex; align-items: center; gap: 12px; }
+.card .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.card .ttl { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.card .ttl b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .ttl small { font-size: 12px; color: var(--fg-3); flex: none; }
+.card .sub { font-size: 13px; color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .row { display: flex; gap: 8px; padding-left: 56px; }
+.card .row button { flex: 1; }
+.card .row.end { padding-left: 0; justify-content: flex-end; flex-wrap: wrap; }
+.card .row.end button { flex: none; padding: 0 18px; }
+.card .row.end button.solid { padding: 0 22px; }
+.pb { height: 44px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.pb.solid { border: 0; font-weight: 700; box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
+.pb.solid:hover { filter: brightness(1.08); }
+.pb.g { background: var(--green); color: var(--green-ink); }
+.pb.a { background: var(--amber); color: var(--amber-ink); }
+.pb.r { background: var(--red); color: var(--red-ink); }
+.codebox { font-family: var(--mono); font-size: 12.5px; color: var(--code); background: rgba(0,0,0,.28); border: 1px solid var(--subtle-line); border-radius: 14px; padding: 10px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track { position: absolute; left: 28px; right: 28px; bottom: 6px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden; }
+.track i { display: block; height: 100%; }
+.ghost { position: absolute; height: 60px; border-radius: 26px; }
+.older { margin-top: 8px; text-align: right; font-size: 12px; color: var(--fg-3); padding-right: 12px; background: none; border: 0; font-family: inherit; cursor: pointer; width: 100%; }
+
+.panel { width: 520px; border-radius: 32px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.panel .ph { display: flex; align-items: center; gap: 10px; padding: 2px 4px 4px 8px; }
+.panel .ph div { flex: 1; display: flex; align-items: baseline; gap: 8px; }
+.panel .ph b { font-size: 17px; font-weight: 700; }
+.panel .ph span { font-size: 13px; color: var(--fg-3); }
+.round { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0; }
+.prow { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 22px; background: rgba(255,255,255,.06); border: 1px solid var(--subtle-line); }
+.prow.done { background: rgba(48,209,88,.12); border-color: rgba(48,209,88,.28); }
+.prow.wait { background: rgba(255,159,10,.12); border-color: rgba(255,159,10,.3); }
+.prow .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.prow .nm { display: flex; align-items: center; gap: 8px; }
+.prow .nm b { font-size: 15px; font-weight: 600; }
+.prow .tag { font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+.prow .det { font-size: 12.5px; color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow .det.mono { font-family: var(--mono); font-size: 11.5px; color: var(--fg-3); }
+.prow .pb { flex: none; padding: 0 16px; font-size: 13px; }
+.panel .pf { display: flex; justify-content: space-between; padding: 6px 8px 2px; font-size: 12px; color: var(--fg-3); gap: 12px; }
+
+.demo-controls { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px; border-radius: 18px; background: var(--well); width: fit-content; max-width: 100%; }
+.demo-controls button {
+  height: 40px; padding: 0 14px; border-radius: 14px; border: 1px solid transparent; background: transparent;
+  color: var(--fg-2); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+}
+.demo-controls button[aria-pressed="true"] { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.3); color: var(--fg); font-weight: 600; }
+.demo-note { margin: 0; font-size: 13px; color: var(--fg-3); }
+
+/* ---------- Sections ---------- */
+section.block { padding-block: 72px 8px; display: grid; gap: 28px; }
+.eyebrow { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-3); }
+section.block h2 { margin: 0; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.08; font-weight: 800; letter-spacing: -.03em; text-wrap: balance; max-width: 20ch; }
+section.block .intro { margin: 0; color: var(--fg-2); max-width: 62ch; font-size: 17px; }
+.heading { display: grid; gap: 12px; }
+
+.states { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 14px; }
+.state { border-radius: 26px; padding: 26px 16px 20px; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; background: var(--subtle); border: 1px solid var(--subtle-line); }
+.state .pill { cursor: default; }
+.state h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.state p { margin: 2px 0 0; font-size: 13px; color: var(--fg-3); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; align-items: start; }
+.cards .card { width: 100%; }
+.cards figure { margin: 0; display: grid; gap: 12px; }
+.cards figcaption { font-size: 14px; color: var(--fg-2); padding: 0 8px; }
+.cards figcaption b { color: var(--fg); font-weight: 600; }
+
+.quiet { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 20px; align-items: start; }
+.group { border-radius: 22px; background: var(--subtle); border: 1px solid var(--subtle-line); overflow: hidden; }
+.group .it { display: flex; align-items: center; gap: 16px; padding: 14px 16px; }
+.group .it + .it { border-top: 1px solid var(--subtle-line); }
+.group .it div { flex: 1; min-width: 0; }
+.group .it b { display: block; font-size: 15px; font-weight: 500; }
+.group .it span { display: block; font-size: 13px; color: var(--fg-3); }
+.sw { flex: none; width: 51px; height: 31px; border-radius: 999px; border: 0; background: var(--green); position: relative; padding: 0; cursor: pointer; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 22px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); transition: left .15s; }
+.sw[aria-pressed="false"] { background: rgba(120,120,128,.4); }
+.sw[aria-pressed="false"]::after { left: 2px; }
+.seg { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--well); flex: none; }
+.seg button { height: 32px; padding: 0 12px; border-radius: 9px; border: 0; background: transparent; color: var(--fg-2); font: inherit; font-size: 13px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: rgba(255,255,255,.2); color: var(--fg); font-weight: 600; }
+
+.sound { border-radius: 28px; padding: 24px; display: grid; gap: 18px; }
+.sound h3 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.sound p { margin: 0; color: var(--fg-2); font-size: 15px; }
+.rules { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.rules li { display: grid; grid-template-columns: 80px 1fr; gap: 14px; align-items: baseline; font-size: 14px; color: var(--fg-2); padding-top: 10px; border-top: 1px solid var(--subtle-line); }
+.rules li b { font-family: var(--mono); font-weight: 500; font-size: 13px; color: var(--fg); }
+.tones { display: flex; flex-wrap: wrap; gap: 8px; }
+.tones button { height: 40px; padding: 0 16px; border-radius: 999px; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+.tones button i { width: 8px; height: 8px; border-radius: 50%; }
+
+kbd { font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius: 8px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); color: var(--fg); }
+.keys { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+
+.install { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; align-items: start; }
+.term { border-radius: 22px; overflow: hidden; background: rgba(0,0,0,.35); border: 1px solid var(--subtle-line); min-width: 0; }
+.term .tb { display: flex; justify-content: space-between; align-items: center; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--subtle-line); font-size: 13px; color: var(--fg-3); }
+.term .tb button { height: 32px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+.term pre { margin: 0; padding: 16px; overflow-x: auto; font: 13px/1.75 var(--mono); color: var(--fg); }
+.term pre .c { color: var(--fg-3); }
+.flow { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; counter-reset: step; }
+.flow li { counter-increment: step; display: grid; grid-template-columns: 36px 1fr; gap: 12px; padding: 14px 0; border-top: 1px solid var(--subtle-line); font-size: 15px; color: var(--fg-2); }
+.flow li:first-child { border-top: 0; padding-top: 0; }
+.flow li::before { content: counter(step); width: 28px; height: 28px; border-radius: 9px; background: rgba(255,255,255,.1); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--fg); }
+.flow li b { color: var(--fg); font-weight: 600; }
+.flow code, p code { font-family: var(--mono); font-size: .88em; color: var(--code); }
+
+main, footer { position: relative; z-index: 1; }
+footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .spin, .pulse { animation: none; }
+  .drain { animation: none; transform: scaleX(.5); }
+  .upper { animation: none; }
+  .sw::after { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="fields" aria-hidden="true"><span class="f1"></span><span class="f2"></span><span class="f3"></span></div>
+
+<header class="top">
+  <div class="wrap">
+    <div class="bar lg">
+      <a class="brand" href="#top"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>ClaudeHUD</a>
+      <nav aria-label="Hlavní">
+        <a href="#stavy">Stavy</a>
+        <a href="#oznameni">Oznámení</a>
+        <a href="#klid">Klid</a>
+        <a href="https://github.com/oondraa/ClaudeHUD">GitHub</a>
+        <a class="cta" href="#instalace">Instalace</a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap">
+    <section class="hero">
+      <div class="hero-copy">
+        <h1>Claude dodělal. <em>Víš o tom hned.</em></h1>
+        <p class="lede">ClaudeHUD je malý skleněný ostrov v pravém dolním rohu Windows, hned nad hodinami. Hlídá všechny tvoje relace Claude Code. Když některá skončí, spadne nebo chce svolení, vyjede nad ním karta. Schválíš to tam, kde právě jsi.</p>
+        <div class="actions">
+          <a class="btn primary" href="#instalace">Nainstalovat</a>
+          <a class="btn lgb" href="#stavy">Projít stavy</a>
+        </div>
+      </div>
+
+      <div class="demo">
+        <div class="stage-shell" id="shell">
+          <div class="stage" id="stage" aria-label="Ukázka ClaudeHUD v pravém dolním rohu obrazovky">
+            <span class="s-field" style="width:700px;height:700px;left:-200px;top:-300px;background:var(--field-blue);filter:blur(120px);opacity:.6"></span>
+            <span class="s-field" style="width:600px;height:600px;right:-160px;top:120px;background:var(--field-violet);filter:blur(130px);opacity:.5"></span>
+            <div class="editor" aria-hidden="true">
+              <div class="titlebar"><b></b><span><i></i><i></i><i></i></span></div>
+              <div class="ed-body">
+                <div class="files" id="files"></div>
+                <div class="code" id="code"></div>
+              </div>
+            </div>
+            <div class="taskbar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><span class="clock">14:32<br>25. 10. 2026</span></div>
+            <div class="corner hud" id="corner" aria-live="polite"></div>
+          </div>
+        </div>
+        <div class="demo-controls" role="group" aria-label="Stav ukázky" id="controls">
+          <button type="button" data-s="work">Pracuje</button>
+          <button type="button" data-s="done" aria-pressed="true">Hotovo</button>
+          <button type="button" data-s="perm">Chce svolení</button>
+          <button type="button" data-s="panel">Panel</button>
+        </div>
+        <p class="demo-note">Ukázka se přepíná sama. Tlačítka v kartách fungují stejně jako v aplikaci.</p>
+      </div>
+    </section>
+
+    <section class="block" id="stavy">
+      <div class="heading">
+        <p class="eyebrow">Kompaktní ostrov · vždy viditelný, 40 px</p>
+        <h2>Jeden pohled do rohu stačí.</h2>
+        <p class="intro">Ostrov ukazuje vždy to nejnaléhavější. Kdo čeká na tebe, má přednost před hotovými, hotové před chybami a chyby před prací. Když nic neběží, zbydou tři tečky na 30 % viditelnosti.</p>
+      </div>
+      <div class="states hud">
+        <div class="state">
+          <div class="pill lg p-idle"><span class="idle-dot"></span><span class="idle-dot"></span><span class="idle-dot"></span></div>
+          <div><h3>Klid</h3><p>nic neběží · 30 % viditelnost</p></div>
+        </div>
+        <div class="state">
+          <div class="pill lg p-work">
+            <svg class="spin" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2.5"/><path d="M9 2a7 7 0 0 1 7 7" fill="none" stroke="#0A84FF" stroke-width="2.5" stroke-linecap="round"/></svg>
+            <span class="lbl">3 pracují</span><span class="t" data-tick="768">12:48</span>
+            <span class="stack"><span class="av c-oz">OZ</span><span class="av c-op">OP</span><span class="av c-ch">CH</span></span>
+          </div>
+          <div><h3>Pracuje</h3><p>nejdelší běh · kdo je aktivní</p></div>
+        </div>
+        <div class="state">
+          <div class="pill lg p-done">
+            <span class="check"><svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#06290F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="lbl">OZBEAT hotovo</span><span class="mini">Přepnout</span>
+          </div>
+          <div><h3>Hotovo, neviděno</h3><p>zůstane i po sbalení oznámení</p></div>
+        </div>
+        <div class="state">
+          <div class="pill lg p-wait"><span class="pdot pulse"></span><span class="lbl">ClaudeHUD čeká</span><span class="t amber" data-tick="123">2:03</span></div>
+          <div><h3>Čeká na vstup</h3><p>pulzuje, dokud neodpovíš</p></div>
+        </div>
+        <div class="state">
+          <div class="pill lg p-err"><span class="bang">!</span><span class="lbl">opensisakhk selhal</span></div>
+          <div><h3>Chyba</h3><p>červeně jen při pádu API</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="oznameni">
+      <div class="heading">
+        <p class="eyebrow">Rozbalené oznámení · samo se sbalí po 8 s</p>
+        <h2>Odpověz tam, kde jsi.</h2>
+        <p class="intro">Karta vyjede nad ostrovem a s ní dvě tlačítka. Žádost o svolení počká, dokud nerozhodneš. <b>Otevřít</b> tě pošle do terminálu k běžnému dotazu. Starší oznámení se řadí za kartu a po najetí myší se odpočet zastaví.</p>
+      </div>
+      <div class="cards hud">
+        <figure>
+          <div class="card lg">
+            <div class="head">
+              <div class="av lg44 c-oz">OZ<span class="badge ok"><svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#06290F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+              <div class="txt"><div class="ttl"><b>OZBEAT dokončil práci</b><small>teď</small></div><div class="sub">Build skript upraven · 4 soubory · 6 min 12 s</div></div>
+            </div>
+            <div class="row"><button type="button" class="pb solid g">Přepnout</button><button type="button" class="pb lgb">Později</button></div>
+            <div class="track"><i class="drain" style="background:rgba(48,209,88,.7)"></i></div>
+          </div>
+          <figcaption><b>Hotovo.</b> Kolik souborů se změnilo a jak dlouho to trvalo. Přepnout tě hodí rovnou do správného terminálu.</figcaption>
+        </figure>
+        <figure>
+          <div class="card lg perm">
+            <div class="head">
+              <div class="av lg44 c-ch">CH<span class="badge wait pulse"></span></div>
+              <div class="txt"><div class="ttl"><b>ClaudeHUD čeká na tvoje rozhodnutí</b></div><div class="sub">Chce spustit příkaz v terminálu</div></div>
+            </div>
+            <div class="codebox">Bash: cargo build --release</div>
+            <div class="row end"><button type="button" class="pb lgb">Zamítnout</button><button type="button" class="pb lgb">Otevřít</button><button type="button" class="pb solid a">Povolit</button></div>
+          </div>
+          <figcaption><b>Svolení.</b> Přesný příkaz nebo soubor, o který jde. Karta nezmizí, dokud neodpovíš.</figcaption>
+        </figure>
+        <figure>
+          <div class="card lg">
+            <div class="head">
+              <div class="av lg44 c-op">OP<span class="badge err">!</span></div>
+              <div class="txt"><div class="ttl"><b>opensisakhk narazil na chybu</b><small>teď</small></div><div class="sub">Narazil na limit API · 429 Too Many Requests</div></div>
+            </div>
+            <div class="row"><button type="button" class="pb solid r">Zobrazit</button><button type="button" class="pb lgb">Ignorovat</button></div>
+            <div class="track"><i class="drain" style="background:rgba(255,69,58,.7)"></i></div>
+          </div>
+          <figcaption><b>Chyba.</b> Když tah ukončí chyba API, třeba limit nebo výpadek, místo běžného konce.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="block" id="klid">
+      <div class="heading">
+        <p class="eyebrow">Aby nepřekážel</p>
+        <h2>Ozve se, jen když má co říct.</h2>
+        <p class="intro">Systémové pípnutí Windows tě po minutě přestane bavit. ClaudeHUD hraje vlastní tichý dvoutón a hlídá, aby nezazněl zbytečně.</p>
+      </div>
+      <div class="quiet">
+        <div class="group" role="group" aria-label="Nastavení ostrova">
+          <div class="it"><div><b>Proklikávací</b><span>Kliky projdou do okna pod ním, dokud nepodržíš Alt</span></div><button type="button" class="sw" aria-pressed="true" aria-label="Proklikávací"></button></div>
+          <div class="it"><div><b>Ztlumit při psaní</b><span>Když píšeš, ostrov zprůhlední na 30 %</span></div><button type="button" class="sw" aria-pressed="true" aria-label="Ztlumit při psaní"></button></div>
+          <div class="it"><div><b>Skrýt při celé obrazovce</b><span>Hry a video — oznámení počkají</span></div><button type="button" class="sw" aria-pressed="true" aria-label="Skrýt při celé obrazovce"></button></div>
+          <div class="it"><div><b>Sbalit oznámení po</b></div>
+            <div class="seg" role="group" aria-label="Sbalit oznámení po"><button type="button" aria-pressed="false">5 s</button><button type="button" aria-pressed="true">8 s</button><button type="button" aria-pressed="false">15 s</button><button type="button" aria-pressed="false">Nikdy</button></div>
+          </div>
+          <div class="it"><div><b>Přepnout na poslední hotový</b></div><span class="keys"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Mezerník</kbd></span></div>
+          <div class="it"><div><b>Otevřít panel</b></div><span class="keys"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>H</kbd></span></div>
+        </div>
+        <div class="sound lg">
+          <h3>Jemný tón místo pípnutí</h3>
+          <p>Krátký marimbový dvoutón v šestině hlasitosti. Hotovo stoupá, čekání dvakrát ťukne a chyba klesá. Poznáš to bez dívání.</p>
+          <div class="tones">
+            <button type="button" class="lgb" data-tone="done"><i style="background:var(--green)"></i>Hotovo</button>
+            <button type="button" class="lgb" data-tone="wait"><i style="background:var(--amber)"></i>Čeká</button>
+            <button type="button" class="lgb" data-tone="err"><i style="background:var(--red)"></i>Chyba</button>
+          </div>
+          <ul class="rules">
+            <li><b>30 s</b><span>Po zvuku mlčí každé další „hotovo“. Když dobíhá víc agentů najednou, uslyšíš jedno cinknutí.</span></li>
+            <li><b>4 s</b><span>Minimální rozestup i pro naléhavé zvuky, aby se nepřekrývaly.</span></li>
+            <li><b>okno</b><span>Když se zrovna díváš do terminálu té relace, nezazní nic.</span></li>
+            <li><b>hra</b><span>Při celé obrazovce se zvuk odloží, dokud se nevrátíš.</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="instalace">
+      <div class="heading">
+        <p class="eyebrow">Instalace · Windows 10 a 11</p>
+        <h2>Tři příkazy a hotovo.</h2>
+        <p class="intro">Potřebuješ Rust a Claude Code. Instalátor přidá hooky do <code>~/.claude/settings.json</code> a předtím si udělá zálohu.</p>
+      </div>
+      <div class="install">
+        <div class="term">
+          <div class="tb"><span>PowerShell</span><button type="button" class="lgb" id="copy">Kopírovat</button></div>
+          <pre id="cmds"><span class="c"># stažení a sestavení</span>
+git clone https://github.com/oondraa/ClaudeHUD
+cd ClaudeHUD
+cargo build --release
+<span class="c"># hooky do Claude Code (se zálohou)</span>
+target\release\claudehud-hook.exe install
+<span class="c"># spuštění HUDu</span>
+target\release\claudehud.exe</pre>
+        </div>
+        <ol class="flow">
+          <li><div><b>Hook předá událost.</b> Claude Code spustí <code>claudehud-hook.exe</code> u začátku relace, promptu, nástroje, žádosti o svolení, oznámení, konce i chyby.</div></li>
+          <li><div><b>HUD ji přijme lokálně.</b> Přes <code>127.0.0.1:47821</code>, nic neopouští počítač. Port změníš proměnnou <code>CLAUDEHUD_PORT</code>.</div></li>
+          <li><div><b>Čeká jen svolení.</b> Ostatní hooky běží asynchronně, takže Claude Code nikdy nebrzdí. Když HUD neběží, všechno funguje jako dřív.</div></li>
+          <li><div><b>Restartuj relace.</b> Běžící relace Claude Code si hooky načtou po restartu nebo příkazem <code>/hooks</code>.</div></li>
+        </ol>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="wrap">
+  <span>ClaudeHUD · společník pro Claude Code na Windows · <a href="https://github.com/oondraa/ClaudeHUD">GitHub</a></span>
+  <span>Inter a JetBrains Mono pod licencí SIL OFL</span>
+</footer>
+
+<script>
+(function () {
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Editor skeleton in the demo.
+  var files = document.getElementById('files');
+  [120, 90, 140, 100, 70, 130, 110, 80, 150, 95, 120, 60].forEach(function (w) {
+    var i = document.createElement('i'); i.style.width = w + 'px'; files.appendChild(i);
+  });
+  var pal = ['#C586C0', '#9CDCFE', '#4EC9B0', '#CE9178', '#6A9955', '#DCDCAA'];
+  var spec = [[180,0],[320,24],[260,48],[400,48],[220,24],[140,0],[0,0],[240,0],[360,24],[300,48],[180,48],[420,72],[260,48],[200,24],[120,0],[0,0],[280,0],[340,24],[220,24],[160,0],[300,0],[240,24],[380,48]];
+  var code = document.getElementById('code');
+  spec.forEach(function (s, i) {
+    var el = document.createElement('i');
+    el.style.width = s[0] + 'px'; el.style.marginLeft = s[1] + 'px';
+    el.style.background = s[0] === 0 ? 'transparent' : pal[i % pal.length] + '66';
+    code.appendChild(el);
+  });
+
+  // Scale the 1100×640 stage to its frame.
+  var shell = document.getElementById('shell'), stage = document.getElementById('stage');
+  function fit() { stage.style.transform = 'scale(' + (shell.clientWidth / 1100) + ')'; }
+  fit();
+  window.addEventListener('resize', fit);
+
+  // --- HUD markup -------------------------------------------------------
+  var CHECK = '<svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#06290F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function spinner(size, color, w) {
+    return '<svg class="spin" width="' + size + '" height="' + size + '" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="' + w + '"/><path d="M9 2a7 7 0 0 1 7 7" fill="none" stroke="' + color + '" stroke-width="' + w + '" stroke-linecap="round"/></svg>';
+  }
+  var AVS = '<span class="stack"><span class="av c-oz">OZ</span><span class="av c-op">OP</span><span class="av c-ch">CH</span></span>';
+  function clock(s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+
+  var t0 = Date.now();
+  function since(base) { return clock(base + Math.floor((Date.now() - t0) / 1000)); }
+
+  var views = {
+    work: function () {
+      return '<button type="button" class="pill lg p-work" data-act="panel" aria-label="Otevřít ClaudeHUD: 3 agenti pracují">' + spinner(18, '#0A84FF', 2.5) +
+        '<span class="lbl">3 pracují</span><span class="t">' + since(768) + '</span>' + AVS + '</button>';
+    },
+    done: function () {
+      return '<div class="upper" style="width:400px">' +
+        '<div class="ghost lg" style="left:24px;right:24px;top:-20px;opacity:.55"></div>' +
+        '<div class="ghost lg" style="left:12px;right:12px;top:-10px;opacity:.8"></div>' +
+        '<div class="card lg" role="status">' +
+          '<div class="head"><div class="av lg44 c-oz">OZ<span class="badge ok">' + CHECK + '</span></div>' +
+          '<div class="txt"><div class="ttl"><b>OZBEAT dokončil práci</b><small>teď</small></div><div class="sub">Build skript upraven · 4 soubory · 6 min 12 s</div></div></div>' +
+          '<div class="row"><button type="button" class="pb solid g" data-act="work">Přepnout</button><button type="button" class="pb lgb" data-act="work">Později</button></div>' +
+          '<div class="track"><i class="drain" style="background:rgba(48,209,88,.7)"></i></div>' +
+        '</div>' +
+        '<button type="button" class="older" data-act="panel">+ 2 starší oznámení</button></div>' +
+        '<button type="button" class="pill lg p-work" data-act="panel" aria-label="Otevřít ClaudeHUD: 2 agenti pracují, 1 hotový">' + spinner(18, '#0A84FF', 2.5) +
+        '<span class="lbl">2 pracují</span><span class="sep"></span><span class="dot"></span><span class="lbl">1 hotovo</span>' + AVS + '</button>';
+    },
+    perm: function () {
+      return '<div class="upper"><div class="card lg perm" role="alert">' +
+          '<div class="head"><div class="av lg44 c-ch">CH<span class="badge wait pulse"></span></div>' +
+          '<div class="txt"><div class="ttl"><b>ClaudeHUD čeká na tvoje rozhodnutí</b></div><div class="sub">Chce spustit příkaz v terminálu</div></div></div>' +
+          '<div class="codebox">Bash: cargo build --release &amp;&amp; target\\release\\claudehud.exe</div>' +
+          '<div class="row end"><button type="button" class="pb lgb" data-act="work">Zamítnout</button><button type="button" class="pb lgb" data-act="panel">Otevřít</button><button type="button" class="pb solid a" data-act="work">Povolit</button></div>' +
+        '</div></div>' +
+        '<button type="button" class="pill lg p-wait" data-act="panel"><span class="pdot pulse"></span><span class="lbl">ClaudeHUD čeká</span><span class="t amber">' + since(123) + '</span></button>';
+    },
+    panel: function () {
+      return '<div class="upper"><div class="panel lg">' +
+          '<div class="ph"><div><b>Claude Code</b><span>3 relace</span></div>' +
+          '<button type="button" class="round lgb" aria-label="Nastavení"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>' +
+          '<button type="button" class="round lgb" data-act="work" aria-label="Sbalit"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>' +
+          '<div class="prow done"><div class="av lg40 c-oz">OZ</div><div class="txt"><div class="nm"><b>OZBEAT</b><span class="tag" style="color:var(--green)">HOTOVO · 6:12</span></div><div class="det">Build skript upraven, 4 soubory změněny</div></div><button type="button" class="pb solid g" data-act="work">Přepnout</button></div>' +
+          '<div class="prow wait"><div class="av lg40 c-ch">CH</div><div class="txt"><div class="nm"><b>ClaudeHUD</b><span class="pdot pulse" style="width:7px;height:7px"></span><span class="tag" style="color:var(--amber)">ČEKÁ NA VSTUP · ' + since(123) + '</span></div><div class="det">Spustil jsem claudehud.exe — mám pokračovat?</div></div><button type="button" class="pb solid a" data-act="perm">Odpovědět</button></div>' +
+          '<div class="prow"><div class="av lg40 c-op">OP</div><div class="txt"><div class="nm"><b>opensisakhk</b>' + spinner(12, '#409CFF', 3) + '<span class="tag" style="color:var(--blue-tag)">PRACUJE · ' + since(768) + '</span></div><div class="det mono">Bash: cd Projekty/Opensisakhk &amp;&amp; cargo test</div></div><button type="button" class="pb lgb">Otevřít</button></div>' +
+          '<div class="pf"><span>Ostrov propouští kliky, dokud nepodržíš Alt</span><span>Ctrl + Alt + H</span></div>' +
+        '</div></div>' +
+        '<button type="button" class="pill lg p-wait" data-act="work"><span class="pdot pulse"></span><span class="lbl">ClaudeHUD čeká</span><span class="t amber">' + since(123) + '</span></button>';
+    }
+  };
+
+  var corner = document.getElementById('corner');
+  var controls = document.getElementById('controls');
+  var order = ['work', 'done', 'perm', 'panel'];
+  var current = 'done';
+  var held = false;
+
+  function show(name) {
+    current = name;
+    corner.innerHTML = views[name]();
+    controls.querySelectorAll('button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.s === name));
+    });
+  }
+  show('done');
+
+  controls.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    held = true; show(b.dataset.s);
+  });
+  corner.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act]'); if (!b) return;
+    held = true; show(b.dataset.act);
+  });
+  shell.addEventListener('mouseenter', function () { held = true; });
+  shell.addEventListener('mouseleave', function () { held = false; });
+
+  // Auto-advance like a real afternoon, and keep the timers ticking.
+  if (!reduce) {
+    setInterval(function () {
+      if (held) return;
+      show(order[(order.indexOf(current) + 1) % order.length]);
+    }, 6500);
+  }
+  setInterval(function () {
+    corner.querySelectorAll('.t').forEach(function (el) {
+      el.textContent = since(el.classList.contains('amber') ? 123 : 768);
+    });
+    document.querySelectorAll('[data-tick]').forEach(function (el) {
+      el.textContent = since(Number(el.dataset.tick));
+    });
+  }, 1000);
+
+  // Settings controls are live toys.
+  document.querySelectorAll('.sw').forEach(function (b) {
+    b.addEventListener('click', function () { b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true')); });
+  });
+  document.querySelectorAll('.seg').forEach(function (g) {
+    g.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      g.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    });
+  });
+
+  // The same chimes the app synthesizes (sound.rs), via Web Audio.
+  var ctx = null;
+  var TONES = { done: [[783.99, 0], [1046.5, .11]], wait: [[880, 0], [880, .16]], err: [[659.25, 0], [523.25, .14]] };
+  document.querySelectorAll('[data-tone]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      try {
+        ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+        var now = ctx.currentTime;
+        TONES[b.dataset.tone].forEach(function (n) {
+          [[1, .16], [2, .12 * .16], [3, .04 * .16]].forEach(function (h) {
+            var o = ctx.createOscillator(), g = ctx.createGain();
+            o.frequency.value = n[0] * h[0];
+            g.gain.setValueAtTime(0, now + n[1]);
+            g.gain.linearRampToValueAtTime(h[1], now + n[1] + .005);
+            g.gain.exponentialRampToValueAtTime(.0001, now + n[1] + .55);
+            o.connect(g).connect(ctx.destination);
+            o.start(now + n[1]); o.stop(now + n[1] + .6);
+          });
+        });
+      } catch (err) { /* no audio available */ }
+    });
+  });
+
+  // Copy the install commands.
+  var copy = document.getElementById('copy');
+  copy.addEventListener('click', function () {
+    var text = 'cargo build --release\ntarget\\release\\claudehud-hook.exe install\ntarget\\release\\claudehud.exe';
+    var done = function () { copy.textContent = 'Zkopírováno'; setTimeout(function () { copy.textContent = 'Kopírovat'; }, 1600); };
+    try {
+      navigator.clipboard.writeText(text).then(done, function () { select(); });
+    } catch (err) { select(); }
+    function select() {
+      var r = document.createRange(); r.selectNodeContents(document.getElementById('cmds'));
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    }
+  });
+})();
+</script>
+</body>
+</html>
