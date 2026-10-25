@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use windows_sys::Win32::Foundation::{CloseHandle, HWND, INVALID_HANDLE_VALUE, LPARAM, POINT, RECT};
+use windows_sys::Win32::Foundation::{CloseHandle, HWND, INVALID_HANDLE_VALUE, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Dwm::{
     DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
     DwmSetWindowAttribute,
@@ -17,14 +17,14 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     RegisterHotKey, VK_H, VK_MENU, VK_SPACE, keybd_event,
 };
 use windows_sys::Win32::UI::Shell::{
-    QUNS_BUSY, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState,
+    DefSubclassProc, SetWindowSubclass, QUNS_BUSY, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, EnumWindows, GW_OWNER, GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetMessageW,
     GetWindow, GetWindowLongPtrW, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindow,
     GetWindowTextW, HWND_TOPMOST, IsWindowVisible, MB_ICONASTERISK, MSG, SPI_GETWORKAREA, SW_RESTORE,
-    SWP_NOACTIVATE, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, SystemParametersInfoW,
-    WM_HOTKEY, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, SystemParametersInfoW,
+    WM_HOTKEY, WM_NCCALCSIZE, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 
 struct Proc {
@@ -171,7 +171,27 @@ pub fn undecorate(hwnd: isize) {
         DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR as u32, &none as *const u32 as _, 4);
         let corners = DWMWCP_DONOTROUND;
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE as u32, &corners as *const i32 as _, 4);
+        // Re-adding the same subclass is a no-op, so this is safe to repeat.
+        SetWindowSubclass(hwnd, Some(full_client_area), 1, 0);
+        SetWindowPos(hwnd, std::ptr::null_mut(), 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
+}
+
+/// The client area is the whole window. winit shifts it 1px down to make room
+/// for a drop shadow on undecorated windows, which leaves a dark line along
+/// the top edge of the transparent canvas.
+unsafe extern "system" fn full_client_area(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    _data: usize,
+) -> LRESULT {
+    if msg == WM_NCCALCSIZE && wparam != 0 {
+        return 0;
+    }
+    unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
 }
 
 /// Makes a window a non-activating tool window: clicking it never steals focus
