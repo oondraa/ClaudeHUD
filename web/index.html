@@ -13,6 +13,7 @@
 <meta property="og:description" content="Víš hned, když Claude Code dodělá, čeká nebo chce svolení. Skleněný ostrov v rohu Windows pro všechny tvoje relace.">
 <meta property="og:locale" content="cs_CZ">
 <meta name="twitter:card" content="summary">
+<meta name="author" content="Ondřej Zajíček">
 <meta name="google-site-verification" content="bVb7uDbiZeKTo60uHFWjh2av7620HBJBl7iYOHcBhhQ" />
 <script type="application/ld+json">
 {
@@ -30,6 +31,15 @@
   "@type": "Offer",
   "price": "0",
   "priceCurrency": "CZK"
+ },
+ "author": {
+  "@type": "Person",
+  "name": "Ondřej Zajíček",
+  "alternateName": "oondraa",
+  "url": "https://oondraa.pages.dev/",
+  "sameAs": [
+   "https://github.com/oondraa"
+  ]
  }
 }
 </script>
@@ -164,6 +174,14 @@
    "acceptedAnswer": {
     "@type": "Answer",
     "text": "ClaudeHUD je malý skleněný ostrov v rohu obrazovky, něco jako Dynamic Island pro Claude Code. Na rozdíl od běžných oznámení Windows ukazuje živý stav všech relací, umí odpovědět na žádost o svolení přímo z karty, přepne tě do správného okna a nehromadí zprávy v centru oznámení."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Kdo ClaudeHUD vytvořil?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "ClaudeHUD vytvořil Ondřej Zajíček (oondraa), vývojář a designér z Hradce Králové. Dělá i další aplikace, třeba OZBEAT a OpenSISAKHK. Nápady a chyby piš na GitHub."
    }
   }
  ]
@@ -484,6 +502,8 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius
 .flow code, p code { font-family: var(--mono); font-size: .88em; color: var(--code); }
 
 main, footer { position: relative; z-index: 1; }
+footer a { color: var(--fg-2); }
+footer a:hover { color: var(--fg); }
 footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -772,6 +792,10 @@ target\release\claudehud.exe</pre>
           <summary><h3>Co je ClaudeHUD a čím se liší od běžných notifikací Windows?</h3><span class="chev" aria-hidden="true"></span></summary>
           <p>ClaudeHUD je malý skleněný ostrov v rohu obrazovky, něco jako Dynamic Island pro Claude Code. Na rozdíl od běžných oznámení Windows ukazuje živý stav všech relací, umí odpovědět na žádost o svolení přímo z karty, přepne tě do správného okna a nehromadí zprávy v centru oznámení.</p>
         </details>
+        <details class="qa lg">
+          <summary><h3>Kdo ClaudeHUD vytvořil?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>ClaudeHUD vytvořil <a href="https://oondraa.pages.dev/">Ondřej Zajíček (oondraa)</a>, vývojář a designér z Hradce Králové. Dělá i další aplikace, třeba OZBEAT a OpenSISAKHK. Nápady a chyby piš na <a href="https://github.com/oondraa/ClaudeHUD/issues">GitHub</a>.</p>
+        </details>
       </div>
     </section>
   </div>
@@ -779,6 +803,7 @@ target\release\claudehud.exe</pre>
 
 <footer class="wrap">
   <span>ClaudeHUD · společník pro Claude Code na Windows · <a href="https://github.com/oondraa/ClaudeHUD">GitHub</a></span>
+  <span>Vytvořil <a href="https://oondraa.pages.dev/" rel="author">Ondřej Zajíček (oondraa)</a></span>
   <span>Inter a JetBrains Mono pod licencí SIL OFL</span>
 </footer>
 
