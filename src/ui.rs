@@ -41,7 +41,6 @@ pub const BADGE_RING: Color32 = Color32::from_rgb(0x1C, 0x1E, 0x28);
 /// design's 40 % to stay readable over arbitrary windows.
 const GLASS_FILL: Color32 = rgba(26, 28, 40, 232);
 const GLASS_BORDER: Color32 = white(0.16);
-const GLASS_HIGHLIGHT: Color32 = white(0.38);
 
 pub const FILL_SUBTLE: Color32 = white(0.07);
 pub const LINE_SUBTLE: Color32 = white(0.08);
@@ -193,7 +192,9 @@ fn sheen(p: &Painter, rect: Rect, r: f32, strength: f32) {
         let (l, rr) = span_at(rect, r, y);
         for j in 0..=cols {
             let q = pos2(l + (rr - l) * j as f32 / cols as f32, y);
-            mesh.colored_vertex(q, white(alpha(q).min(1.0)));
+            // Fade out towards the mesh's lower edge so it never ends in a seam.
+            let fade = 1.0 - i as f32 / rows as f32;
+            mesh.colored_vertex(q, white((alpha(q) * fade * fade).min(1.0)));
         }
     }
     let w = cols as u32 + 1;
@@ -218,10 +219,6 @@ pub fn glass(p: &Painter, rect: Rect, r: f32, border: Option<Color32>) {
     p.add(close.as_shape(rect, r));
     p.rect_filled(rect, r, GLASS_FILL);
     sheen(p, rect, r, 0.16);
-    // Inner top highlight.
-    let y = rect.top() + 1.0;
-    let inset = r * 0.7;
-    p.line_segment([pos2(rect.left() + inset, y), pos2(rect.right() - inset, y)], Stroke::new(1.0, GLASS_HIGHLIGHT));
     p.rect_stroke(rect, r, Stroke::new(1.0, border.unwrap_or(GLASS_BORDER)), StrokeKind::Inside);
 }
 
