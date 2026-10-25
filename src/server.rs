@@ -29,13 +29,13 @@ fn handle(stream: TcpStream, state: Arc<Mutex<State>>, ctx: eframe::egui::Contex
     let Ok(msg) = serde_json::from_str::<HookMsg>(&line) else { return };
 
     if msg.event["hook_event_name"] != "PermissionRequest" {
-        state.lock().unwrap().apply(&msg.event, msg.hwnd);
+        state.lock().unwrap().apply(&msg.event, msg.hwnd, msg.pid);
         ctx.request_repaint();
         return;
     }
 
     let (tx, rx) = mpsc::channel();
-    let id = state.lock().unwrap().add_pending(&msg.event, msg.hwnd, tx);
+    let id = state.lock().unwrap().add_pending(&msg.event, msg.hwnd, msg.pid, tx);
     ctx.request_repaint();
 
     // Wait for a click, but give up if Claude Code kills the hook (e.g. the

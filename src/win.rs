@@ -1,6 +1,7 @@
 //! Win32 helpers: locate the terminal window hosting a process, bring it to front.
 
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use windows_sys::Win32::Foundation::{CloseHandle, HWND, INVALID_HANDLE_VALUE, LPARAM, LRESULT, POINT, RECT, WPARAM};
@@ -8,7 +9,7 @@ use windows_sys::Win32::Graphics::Dwm::{
     DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
     DwmSetWindowAttribute,
 };
-use windows_sys::Win32::System::Console::GetConsoleWindow;
+use windows_sys::Win32::System::Console::{AttachConsole, FreeConsole, GetConsoleTitleW, GetConsoleWindow};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Diagnostics::Debug::MessageBeep;
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
@@ -23,7 +24,7 @@ use windows_sys::Win32::UI::Shell::{
     DefSubclassProc, SetWindowSubclass, QUNS_BUSY, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, CallNextHookEx, EnumWindows, KBDLLHOOKSTRUCT, SetWindowsHookExW, WH_KEYBOARD_LL, WM_KEYDOWN,
+    BringWindowToTop, CallNextHookEx, GetClassNameW, EnumWindows, KBDLLHOOKSTRUCT, SetWindowsHookExW, WH_KEYBOARD_LL, WM_KEYDOWN,
     WM_SYSKEYDOWN, GW_OWNER, GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetMessageW,
     GetWindow, GetWindowLongPtrW, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindow,
     GetWindowTextW, HWND_TOPMOST, IsWindowVisible, MB_ICONASTERISK, MSG, SPI_GETWORKAREA, SW_RESTORE,
@@ -119,6 +120,120 @@ pub fn find_terminal_window() -> i64 {
     unsafe { GetConsoleWindow() as i64 }
 }
 
+/// The Claude Code process this hook runs under: the nearest `claude.exe`
+/// (or `node.exe`, for npm installs) ancestor. 0 if there is none.
+pub fn find_session_pid() -> u32 {
+    let procs = process_table();
+    let me = std::process::id();
+    let mut pid = me;
+    for _ in 0..24 {
+        let Some(p) = procs.get(&pid) else { break };
+        if pid != me && matches!(p.exe.as_str(), "claude.exe" | "node.exe") {
+            return pid;
+        }
+        if p.parent == 0 || p.parent == pid {
+            break;
+        }
+        pid = p.parent;
+    }
+    0
+}
+
+fn class_name(hwnd: HWND) -> String {
+    let mut buf = [0u16; 128];
+    let len = unsafe { GetClassNameW(hwnd, buf.as_mut_ptr(), buf.len() as i32) };
+    String::from_utf16_lossy(&buf[..len.max(0) as usize])
+}
+
+/// Attaching to another console is process-wide; one at a time.
+static CONSOLE: Mutex<()> = Mutex::new(());
+
+/// The window showing `pid`'s console and the console's title. A Windows
+/// Terminal tab's pseudo console is owned by the terminal window it is in,
+/// and its title is the tab's title.
+fn console_of(pid: u32) -> Option<(HWND, String)> {
+    let _one = CONSOLE.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        if AttachConsole(pid) == 0 {
+            return None;
+        }
+        let console = GetConsoleWindow();
+        let mut buf = [0u16; 1024];
+        let len = GetConsoleTitleW(buf.as_mut_ptr(), buf.len() as u32) as usize;
+        FreeConsole();
+        if console.is_null() {
+            return None;
+        }
+        let title = String::from_utf16_lossy(&buf[..len.min(buf.len())]);
+        let owner = GetWindow(console, GW_OWNER);
+        if !owner.is_null() {
+            Some((owner, title))
+        } else if IsWindowVisible(console) != 0 && class_name(console) == "ConsoleWindowClass" {
+            Some((console, title))
+        } else {
+            None
+        }
+    }
+}
+
+/// A tab title without Claude Code's animated status glyph in front.
+fn tab_key(title: &str) -> &str {
+    title.trim_start_matches(|c: char| !c.is_alphanumeric()).trim_end()
+}
+
+/// Selects the tab titled `title` in a Windows Terminal window.
+fn select_terminal_tab(window: HWND, title: &str) -> bool {
+    use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx};
+    use windows::Win32::UI::Accessibility::{
+        CUIAutomation, IUIAutomation, IUIAutomationSelectionItemPattern, TreeScope_Descendants,
+        UIA_SelectionItemPatternId, UIA_TabItemControlTypeId,
+    };
+    let want = tab_key(title);
+    if want.is_empty() {
+        return false;
+    }
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let Ok(uia) = CoCreateInstance::<_, IUIAutomation>(&CUIAutomation, None, CLSCTX_INPROC_SERVER) else {
+            return false;
+        };
+        let Ok(root) = uia.ElementFromHandle(windows::Win32::Foundation::HWND(window)) else { return false };
+        let Ok(any) = uia.CreateTrueCondition() else { return false };
+        let Ok(found) = root.FindAll(TreeScope_Descendants, &any) else { return false };
+        for i in 0..found.Length().unwrap_or(0) {
+            let Ok(el) = found.GetElement(i) else { continue };
+            if el.CurrentControlType().ok() != Some(UIA_TabItemControlTypeId) {
+                continue;
+            }
+            let name = el.CurrentName().map(|n| n.to_string()).unwrap_or_default();
+            if tab_key(&name) == want
+                && let Ok(item) = el.GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)
+            {
+                return item.Select().is_ok();
+            }
+        }
+    }
+    false
+}
+
+/// Brings a session's terminal to the front, switching to its tab when it
+/// runs in Windows Terminal. `hwnd` is the hook's guess, used when the
+/// console can't be inspected (VS Code, other terminals).
+pub fn focus_session(hwnd: i64, pid: u32) {
+    let _ = std::thread::Builder::new().name("focus".into()).spawn(move || {
+        let window = match (pid != 0).then(|| console_of(pid)).flatten() {
+            Some((window, title)) => {
+                if class_name(window) == "CASCADIA_HOSTING_WINDOW_CLASS" {
+                    select_terminal_tab(window, &title);
+                }
+                window as i64
+            }
+            None => hwnd,
+        };
+        focus_window(window);
+    });
+}
+
 pub fn window_exists(hwnd: i64) -> bool {
     hwnd != 0 && unsafe { IsWindow(hwnd as HWND) != 0 }
 }
@@ -133,11 +248,16 @@ pub fn focus_window(hwnd: i64) {
         if IsIconic(hwnd) != 0 {
             ShowWindow(hwnd, SW_RESTORE);
         }
-        // A synthetic Alt tap lifts the foreground lock Windows puts on
-        // background processes, so SetForegroundWindow is honored.
-        keybd_event(VK_MENU as u8, 0, 0, 0);
-        keybd_event(VK_MENU as u8, 0, KEYEVENTF_KEYUP, 0);
+        // Clicking the HUD or its hotkey usually earns the right to switch
+        // windows. If Windows still refuses, a synthetic Alt tap lifts the
+        // foreground lock; only then, as Alt can open a menu in the app
+        // that has focus.
         SetForegroundWindow(hwnd);
+        if GetForegroundWindow() != hwnd {
+            keybd_event(VK_MENU as u8, 0, 0, 0);
+            keybd_event(VK_MENU as u8, 0, KEYEVENTF_KEYUP, 0);
+            SetForegroundWindow(hwnd);
+        }
         BringWindowToTop(hwnd);
     }
 }

@@ -27,6 +27,7 @@ pub fn run() {
     };
     let msg = HookMsg {
         hwnd: crate::win::find_terminal_window(),
+        pid: crate::win::find_session_pid(),
         event: event.clone(),
     };
     let Ok(mut line) = serde_json::to_string(&msg) else { return };

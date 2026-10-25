@@ -15,6 +15,10 @@ pub fn port() -> u16 {
 pub struct HookMsg {
     /// Top-level window of the terminal that hosts the Claude Code session (0 = unknown).
     pub hwnd: i64,
+    /// The Claude Code process (0 = unknown). Its console identifies the
+    /// terminal tab the session runs in.
+    #[serde(default)]
+    pub pid: u32,
     /// The raw hook payload Claude Code passed on stdin.
     pub event: serde_json::Value,
 }

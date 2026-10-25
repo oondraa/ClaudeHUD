@@ -684,28 +684,30 @@ impl Hud {
         let mut st = self.state.lock().unwrap();
         match action {
             Action::Decide(id, decision, hwnd) => {
+                let mut terminal = (hwnd, 0);
                 for s in &mut st.sessions {
                     if let Some(i) = s.pending.iter().position(|p| p.id == id) {
                         let p = s.pending.remove(i);
                         let _ = p.tx.send(decision);
                         s.status = Status::Working;
+                        terminal = (s.hwnd, s.pid);
                     }
                 }
                 st.notes.retain(|n| n.kind != NoteKind::Permission(id));
                 drop(st);
                 if decision == Decision::Ask {
-                    win::focus_window(hwnd);
+                    win::focus_session(terminal.0, terminal.1);
                 }
             }
             Action::Switch(sid) => {
-                let hwnd = st.sessions.iter_mut().find(|s| s.id == sid).map(|s| {
+                let terminal = st.sessions.iter_mut().find(|s| s.id == sid).map(|s| {
                     s.seen = true;
-                    s.hwnd
+                    (s.hwnd, s.pid)
                 });
                 st.drop_notes(&sid);
                 drop(st);
-                if let Some(hwnd) = hwnd {
-                    win::focus_window(hwnd);
+                if let Some((hwnd, pid)) = terminal {
+                    win::focus_session(hwnd, pid);
                 }
                 self.panel_open = false;
             }

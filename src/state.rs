@@ -30,6 +30,8 @@ pub struct Session {
     pub id: String,
     pub name: String,
     pub hwnd: i64,
+    /// The Claude Code process, see [`crate::protocol::HookMsg::pid`].
+    pub pid: u32,
     pub status: Status,
     /// The last prompt the user submitted.
     pub prompt: String,
@@ -82,7 +84,7 @@ impl State {
         self.next_id
     }
 
-    fn session(&mut self, ev: &Value, hwnd: i64) -> &mut Session {
+    fn session(&mut self, ev: &Value, hwnd: i64, pid: u32) -> &mut Session {
         let id = ev["session_id"].as_str().unwrap_or("unknown").to_string();
         let idx = match self.sessions.iter().position(|s| s.id == id) {
             Some(i) => i,
@@ -99,6 +101,7 @@ impl State {
                     id,
                     name,
                     hwnd: 0,
+                    pid: 0,
                     status: Status::Idle,
                     prompt: String::new(),
                     step: String::new(),
@@ -117,6 +120,9 @@ impl State {
         let s = &mut self.sessions[idx];
         if hwnd != 0 {
             s.hwnd = hwnd;
+        }
+        if pid != 0 {
+            s.pid = pid;
         }
         s.last_event = Instant::now();
         s
@@ -147,11 +153,11 @@ impl State {
             .retain(|n| n.session_id != session_id || matches!(n.kind, NoteKind::Permission(_)));
     }
 
-    pub fn add_pending(&mut self, ev: &Value, hwnd: i64, tx: Sender<Decision>) -> u64 {
+    pub fn add_pending(&mut self, ev: &Value, hwnd: i64, pid: u32, tx: Sender<Decision>) -> u64 {
         let id = self.next_id();
         let tool = ev["tool_name"].as_str().unwrap_or("tool").to_string();
         let summary = summarize_tool(&tool, &ev["tool_input"]);
-        let s = self.session(ev, hwnd);
+        let s = self.session(ev, hwnd, pid);
         s.status = Status::Working;
         s.working_since.get_or_insert_with(Instant::now);
         s.step = format!("{tool}: {summary}");
@@ -168,7 +174,7 @@ impl State {
         self.notes.retain(|n| n.kind != NoteKind::Permission(id));
     }
 
-    pub fn apply(&mut self, ev: &Value, hwnd: i64) {
+    pub fn apply(&mut self, ev: &Value, hwnd: i64, pid: u32) {
         let name = ev["hook_event_name"].as_str().unwrap_or("");
         if name == "SessionEnd" {
             let id = ev["session_id"].as_str().unwrap_or("");
@@ -176,7 +182,7 @@ impl State {
             self.notes.retain(|n| n.session_id != id);
             return;
         }
-        let s = self.session(ev, hwnd);
+        let s = self.session(ev, hwnd, pid);
         let sid = s.id.clone();
         match name {
             "SessionStart" => {
