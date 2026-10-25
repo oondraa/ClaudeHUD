@@ -3,10 +3,172 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ClaudeHUD</title>
+<title>ClaudeHUD – notifikace a zvuk pro Claude Code na Windows</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Skleněný ostrov v pravém dolním rohu Windows, který hlídá tvoje relace Claude Code.">
+<meta name="description" content="ClaudeHUD ti na Windows dá vědět, když Claude Code dokončí práci, čeká na odpověď nebo chce svolení. Notifikace, tichý zvuk a schvalování přímo z rohu obrazovky. Zdarma, jeden soubor.">
+<link rel="canonical" href="https://oondraa.github.io/ClaudeHUD/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://oondraa.github.io/ClaudeHUD/">
+<meta property="og:title" content="ClaudeHUD – notifikace pro Claude Code na Windows">
+<meta property="og:description" content="Víš hned, když Claude Code dodělá, čeká nebo chce svolení. Skleněný ostrov v rohu Windows pro všechny tvoje relace.">
+<meta property="og:locale" content="cs_CZ">
+<meta name="twitter:card" content="summary">
 <meta name="google-site-verification" content="bVb7uDbiZeKTo60uHFWjh2av7620HBJBl7iYOHcBhhQ" />
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "SoftwareApplication",
+ "name": "ClaudeHUD",
+ "url": "https://oondraa.github.io/ClaudeHUD/",
+ "downloadUrl": "https://github.com/oondraa/ClaudeHUD/releases/latest/download/ClaudeHUD.exe",
+ "applicationCategory": "DeveloperApplication",
+ "operatingSystem": "Windows 10, Windows 11",
+ "description": "Notifikace a zvuk pro Claude Code na Windows: skleněný ostrov v rohu obrazovky ukazuje stav všech relací, upozorní na dokončení a umí schválit oprávnění.",
+ "inLanguage": "cs",
+ "isAccessibleForFree": true,
+ "offers": {
+  "@type": "Offer",
+  "price": "0",
+  "priceCurrency": "CZK"
+ }
+}
+</script>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "FAQPage",
+ "mainEntity": [
+  {
+   "@type": "Question",
+   "name": "Jak zjistím, že Claude Code dokončil práci?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Nainstaluj ClaudeHUD. Jakmile Claude Code v kterékoli relaci doběhne, ostrov v pravém dolním rohu zezelená, ukáže „hotovo“ a vyjede karta s tlačítkem Přepnout, které tě vrátí rovnou do správného terminálu. Nemusíš okno Claude Code hlídat ani se k němu pořád vracet."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Jak zapnout notifikace pro Claude Code na Windows?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Stáhni ClaudeHUD.exe a spusť ho. Při prvním spuštění sám zapíše hooky do ~/.claude/settings.json (se zálohou) a od té chvíle dostáváš upozornění, když Claude Code skončí, čeká na tvou odpověď, chce svolení nebo selže. Nic dalšího nastavovat nemusíš, jen restartuj běžící relace Claude Code."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Umí ClaudeHUD zahrát zvuk, když Claude Code skončí?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Ano, a schválně neotravný. Místo systémového zvuku Windows hraje krátké tiché tóny: jiný pro hotovo, čekání a chybu. Když doběhne víc relací naráz, zazní jen jednou, a když se právě díváš do terminálu té relace, nehraje vůbec. Zvuk jde přepnout na systémový nebo úplně vypnout."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Můžu schvalovat oprávnění Claude Code bez přepínání do terminálu?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Ano. Když Claude Code chce spustit příkaz nebo upravit soubor a čeká na svolení, objeví se nad ostrovem karta s přesným příkazem a tlačítky Povolit, Zamítnout a Otevřít. Rozhodnutí se pošle zpátky do Claude Code a ten hned pokračuje."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Funguje to s více relacemi Claude Code najednou?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Ano, to je hlavní smysl. Ostrov ukazuje, kolik relací pracuje, kolik je hotových a která čeká nejdéle. Po kliknutí se otevře panel se všemi relacemi, jejich projekty a tím, co právě dělají. Zkratka Ctrl Alt Mezerník skočí do poslední hotové."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "V jakém terminálu ClaudeHUD funguje?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Kdekoli, kde běží Claude Code na Windows: Windows Terminal, PowerShell, příkazový řádek, Git Bash i terminál ve VS Code. ClaudeHUD se napojuje přes oficiální hooky Claude Code, ne přes konkrétní terminál, a pozná, ve kterém okně která relace běží, aby se do něj uměl přepnout."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Je ClaudeHUD zdarma?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Ano, je zdarma a celý zdrojový kód je veřejně na GitHubu. Žádný účet, žádné předplatné, žádná reklama."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Je ClaudeHUD bezpečný? Posílá někam moje data?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Události z Claude Code jdou jen přes místní adresu 127.0.0.1 v rámci tvého počítače a nikam se neposílají. Jediné spojení ven je dotaz na GitHub, jestli existuje nová verze. Aktualizace se před instalací ověřuje kontrolním součtem SHA-256. Zdrojový kód si můžeš projít a sestavit sám."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Proč Windows při spuštění ukazuje varování SmartScreen?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Protože ClaudeHUD.exe není podepsaný placeným certifikátem a SmartScreen ho zatím nezná. Klikni na Další informace a pak Přesto spustit. Pokud chceš mít jistotu, porovnej kontrolní součet se souborem SHA256SUMS.txt u vydání, nebo si program sestav ze zdrojáků."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Jak ClaudeHUD aktualizovat?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Nijak, stará se o to sám. Po spuštění a pak každých šest hodin se podívá na GitHub. Když je venku nová verze, ukáže kartu Aktualizovat; po kliknutí ji stáhne, ověří, vymění se a restartuje. Aktuální verzi vidíš v nastavení v sekci O aplikaci."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Jak ClaudeHUD odinstalovat?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Klikni pravým tlačítkem na ikonu ClaudeHUD v oznamovací oblasti a vyber Odebrat hooky a ukončit. Tím se hooky odstraní z nastavení Claude Code. Pak stačí smazat ClaudeHUD.exe a případně složku %APPDATA%\\ClaudeHUD s nastavením."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Nebude mi ostrov překážet při práci?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Je malý, sedí nad hodinami a ozve se, jen když má co říct. Když píšeš, zprůhlední na 30 %, v celé obrazovce (hra, video, prezentace) se schová a karty samy zajedou po několika sekundách. Kliky vedle něj procházejí do oken pod ním. Všechno jde upravit v nastavení."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Jaké má ClaudeHUD požadavky?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Windows 10 nebo 11 a nainstalovaný Claude Code. Nic dalšího: žádný Node.js, Python ani instalátor. ClaudeHUD je jeden soubor o velikosti asi 12 MB."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Funguje ClaudeHUD na macOS nebo Linuxu?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Ne, ClaudeHUD je postavený přímo pro Windows: pracovní plochu, oznamovací oblast a přepínání oken. Na macOS a Linuxu nefunguje."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Spustí se ClaudeHUD sám po zapnutí počítače?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Zatím ne automaticky. Stačí stisknout Win R, napsat shell:startup a do otevřené složky vložit zástupce na ClaudeHUD.exe. Od příštího přihlášení se spustí sám."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Co je ClaudeHUD a čím se liší od běžných notifikací Windows?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "ClaudeHUD je malý skleněný ostrov v rohu obrazovky, něco jako Dynamic Island pro Claude Code. Na rozdíl od běžných oznámení Windows ukazuje živý stav všech relací, umí odpovědět na žádost o svolení přímo z karty, přepne tě do správného okna a nehromadí zprávy v centru oznámení."
+   }
+  }
+ ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -306,12 +468,26 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius
 .flow li:first-child { border-top: 0; padding-top: 0; }
 .flow li::before { content: counter(step); width: 28px; height: 28px; border-radius: 9px; background: rgba(255,255,255,.1); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--fg); }
 .flow li b { color: var(--fg); font-weight: 600; }
+.faq { display: grid; gap: 10px; max-width: 860px; }
+.qa { border-radius: 22px; padding: 0; }
+.qa summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 22px; }
+.qa summary::-webkit-details-marker { display: none; }
+.qa summary:focus-visible { outline: 2px solid rgba(255,255,255,.6); outline-offset: 2px; }
+.qa h3 { margin: 0; flex: 1; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.qa .chev { flex: none; width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,.1); position: relative; transition: transform .2s; }
+.qa .chev::before { content: ""; position: absolute; left: 10px; top: 8px; width: 7px; height: 7px; border-right: 2px solid var(--fg); border-bottom: 2px solid var(--fg); transform: rotate(45deg); }
+.qa[open] .chev { transform: rotate(180deg); }
+.qa p { margin: 0; padding: 0 20px 20px; color: var(--fg-2); font-size: 15px; max-width: 72ch; }
+.qa p b { color: var(--fg); font-weight: 600; }
+.qa a, .intro a { color: var(--fg); }
+.qa kbd { font-size: 11px; padding: 2px 6px; }
 .flow code, p code { font-family: var(--mono); font-size: .88em; color: var(--code); }
 
 main, footer { position: relative; z-index: 1; }
 footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
+  .qa .chev { transition: none; }
   .spin, .pulse { animation: none; }
   .drain { animation: none; transform: scaleX(.5); }
   .upper { animation: none; }
@@ -330,6 +506,7 @@ footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display:
         <a href="#stavy">Stavy</a>
         <a href="#oznameni">Oznámení</a>
         <a href="#klid">Klid</a>
+        <a href="#faq">FAQ</a>
         <a href="https://github.com/oondraa/ClaudeHUD">GitHub</a>
         <a class="cta" href="https://github.com/oondraa/ClaudeHUD/releases/latest/download/ClaudeHUD.exe">Stáhnout</a>
       </nav>
@@ -522,6 +699,79 @@ target\release\claudehud.exe</pre>
           </div>
           <p class="fine">Hooky odebereš v nabídce ikony v oznamovací oblasti: <b>Odebrat hooky a ukončit</b>. Události jdou jen přes <code>127.0.0.1:47821</code> a nic neopouští počítač.</p>
         </div>
+      </div>
+    </section>
+    <section class="block" id="faq">
+      <div class="heading">
+        <p class="eyebrow">Časté otázky</p>
+        <h2>Na co se lidi ptají.</h2>
+        <p class="intro">Notifikace, zvuk, schvalování oprávnění, bezpečnost i odinstalace. Když tu odpověď nenajdeš, napiš na <a href="https://github.com/oondraa/ClaudeHUD/issues">GitHub</a>.</p>
+      </div>
+      <div class="faq">
+        <details class="qa lg">
+          <summary><h3>Jak zjistím, že Claude Code dokončil práci?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Nainstaluj ClaudeHUD. Jakmile Claude Code v kterékoli relaci doběhne, ostrov v pravém dolním rohu zezelená, ukáže <b>„hotovo“</b> a vyjede karta s tlačítkem <b>Přepnout</b>, které tě vrátí rovnou do správného terminálu. Nemusíš okno Claude Code hlídat ani se k němu pořád vracet.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Jak zapnout notifikace pro Claude Code na Windows?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Stáhni <code>ClaudeHUD.exe</code> a spusť ho. Při prvním spuštění sám zapíše hooky do <code>~/.claude/settings.json</code> (se zálohou) a od té chvíle dostáváš upozornění, když Claude Code skončí, čeká na tvou odpověď, chce svolení nebo selže. Nic dalšího nastavovat nemusíš, jen restartuj běžící relace Claude Code.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Umí ClaudeHUD zahrát zvuk, když Claude Code skončí?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Ano, a schválně neotravný. Místo systémového zvuku Windows hraje krátké tiché tóny: jiný pro hotovo, čekání a chybu. Když doběhne víc relací naráz, zazní jen jednou, a když se právě díváš do terminálu té relace, nehraje vůbec. Zvuk jde přepnout na systémový nebo úplně vypnout.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Můžu schvalovat oprávnění Claude Code bez přepínání do terminálu?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Ano. Když Claude Code chce spustit příkaz nebo upravit soubor a čeká na svolení, objeví se nad ostrovem karta s přesným příkazem a tlačítky <b>Povolit</b>, <b>Zamítnout</b> a <b>Otevřít</b>. Rozhodnutí se pošle zpátky do Claude Code a ten hned pokračuje.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Funguje to s více relacemi Claude Code najednou?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Ano, to je hlavní smysl. Ostrov ukazuje, kolik relací pracuje, kolik je hotových a která čeká nejdéle. Po kliknutí se otevře panel se všemi relacemi, jejich projekty a tím, co právě dělají. Zkratka <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>Mezerník</kbd> skočí do poslední hotové.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>V jakém terminálu ClaudeHUD funguje?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Kdekoli, kde běží Claude Code na Windows: Windows Terminal, PowerShell, příkazový řádek, Git Bash i terminál ve VS Code. ClaudeHUD se napojuje přes oficiální hooky Claude Code, ne přes konkrétní terminál, a pozná, ve kterém okně která relace běží, aby se do něj uměl přepnout.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Je ClaudeHUD zdarma?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Ano, je zdarma a celý zdrojový kód je veřejně na <a href="https://github.com/oondraa/ClaudeHUD">GitHubu</a>. Žádný účet, žádné předplatné, žádná reklama.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Je ClaudeHUD bezpečný? Posílá někam moje data?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Události z Claude Code jdou jen přes místní adresu <code>127.0.0.1</code> v rámci tvého počítače a nikam se neposílají. Jediné spojení ven je dotaz na GitHub, jestli existuje nová verze. Aktualizace se před instalací ověřuje kontrolním součtem SHA-256. Zdrojový kód si můžeš projít a sestavit sám.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Proč Windows při spuštění ukazuje varování SmartScreen?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Protože <code>ClaudeHUD.exe</code> není podepsaný placeným certifikátem a SmartScreen ho zatím nezná. Klikni na <b>Další informace</b> a pak <b>Přesto spustit</b>. Pokud chceš mít jistotu, porovnej kontrolní součet se souborem <code>SHA256SUMS.txt</code> u vydání, nebo si program sestav ze zdrojáků.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Jak ClaudeHUD aktualizovat?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Nijak, stará se o to sám. Po spuštění a pak každých šest hodin se podívá na GitHub. Když je venku nová verze, ukáže kartu <b>Aktualizovat</b>; po kliknutí ji stáhne, ověří, vymění se a restartuje. Aktuální verzi vidíš v nastavení v sekci O aplikaci.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Jak ClaudeHUD odinstalovat?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Klikni pravým tlačítkem na ikonu ClaudeHUD v oznamovací oblasti a vyber <b>Odebrat hooky a ukončit</b>. Tím se hooky odstraní z nastavení Claude Code. Pak stačí smazat <code>ClaudeHUD.exe</code> a případně složku <code>%APPDATA%\ClaudeHUD</code> s nastavením.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Nebude mi ostrov překážet při práci?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Je malý, sedí nad hodinami a ozve se, jen když má co říct. Když píšeš, zprůhlední na 30 %, v celé obrazovce (hra, video, prezentace) se schová a karty samy zajedou po několika sekundách. Kliky vedle něj procházejí do oken pod ním. Všechno jde upravit v nastavení.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Jaké má ClaudeHUD požadavky?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Windows 10 nebo 11 a nainstalovaný Claude Code. Nic dalšího: žádný Node.js, Python ani instalátor. ClaudeHUD je jeden soubor o velikosti asi 12 MB.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Funguje ClaudeHUD na macOS nebo Linuxu?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Ne, ClaudeHUD je postavený přímo pro Windows: pracovní plochu, oznamovací oblast a přepínání oken. Na macOS a Linuxu nefunguje.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Spustí se ClaudeHUD sám po zapnutí počítače?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>Zatím ne automaticky. Stačí stisknout <kbd>Win</kbd> <kbd>R</kbd>, napsat <code>shell:startup</code> a do otevřené složky vložit zástupce na <code>ClaudeHUD.exe</code>. Od příštího přihlášení se spustí sám.</p>
+        </details>
+        <details class="qa lg">
+          <summary><h3>Co je ClaudeHUD a čím se liší od běžných notifikací Windows?</h3><span class="chev" aria-hidden="true"></span></summary>
+          <p>ClaudeHUD je malý skleněný ostrov v rohu obrazovky, něco jako Dynamic Island pro Claude Code. Na rozdíl od běžných oznámení Windows ukazuje živý stav všech relací, umí odpovědět na žádost o svolení přímo z karty, přepne tě do správného okna a nehromadí zprávy v centru oznámení.</p>
+        </details>
       </div>
     </section>
   </div>

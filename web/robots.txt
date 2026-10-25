@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://oondraa.github.io/ClaudeHUD/sitemap.xml
