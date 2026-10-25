@@ -4,7 +4,12 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 
-const MARKER: &str = "claudehud-hook";
+/// Whether a hook command points at ClaudeHUD: the standalone
+/// `claudehud-hook.exe`, or `ClaudeHUD.exe hook`.
+fn is_ours(command: &str) -> bool {
+    let c = command.to_lowercase();
+    c.contains("claudehud-hook") || (c.contains("claudehud") && c.trim_end().ends_with(" hook"))
+}
 
 /// (event, blocking?) — only PermissionRequest waits for the HUD's answer;
 /// everything else runs async so Claude Code never waits on us.
@@ -40,7 +45,6 @@ fn save(path: &Path, settings: &Value) -> Result<(), String> {
     if path.exists() {
         let backup = path.with_extension("json.claudehud-backup");
         std::fs::copy(path, &backup).map_err(|e| format!("cannot back up settings: {e}"))?;
-        println!("Backup: {}", backup.display());
     } else if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
@@ -63,7 +67,7 @@ fn strip_ours(settings: &mut Value) -> &mut Map<String, Value> {
         let Some(groups) = groups.as_array_mut() else { continue };
         for group in groups.iter_mut() {
             if let Some(handlers) = group.get_mut("hooks").and_then(Value::as_array_mut) {
-                handlers.retain(|h| !h["command"].as_str().is_some_and(|c| c.contains(MARKER)));
+                handlers.retain(|h| !h["command"].as_str().is_some_and(is_ours));
             }
         }
         groups.retain(|g| g["hooks"].as_array().is_none_or(|h| !h.is_empty()));
@@ -72,18 +76,20 @@ fn strip_ours(settings: &mut Value) -> &mut Map<String, Value> {
     hooks
 }
 
-fn hook_command() -> Result<String, String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let exe = exe.canonicalize().unwrap_or(exe);
+/// The command line Claude Code runs: `exe`, plus `arg` if given.
+pub fn command_for(exe: &Path, arg: Option<&str>) -> String {
+    let exe = exe.canonicalize().unwrap_or_else(|_| exe.to_path_buf());
     // Forward slashes + no verbatim prefix: works in Git Bash, cmd and PowerShell.
     let path = exe.to_string_lossy().trim_start_matches(r"\\?\").replace('\\', "/");
-    Ok(if path.contains(' ') { format!("\"{path}\"") } else { path })
+    let path = if path.contains(' ') { format!("\"{path}\"") } else { path };
+    match arg {
+        Some(arg) => format!("{path} {arg}"),
+        None => path,
+    }
 }
 
-pub fn install() -> Result<(), String> {
-    let path = settings_path();
-    let mut settings = load(&path)?;
-    let command = hook_command()?;
+/// `settings` with our handlers (and only ours) pointing at `command`.
+fn with_hooks(mut settings: Value, command: &str) -> Value {
     let hooks = strip_ours(&mut settings);
     for &(event, blocking) in EVENTS {
         let handler = if blocking {
@@ -96,6 +102,27 @@ pub fn install() -> Result<(), String> {
             groups.push(json!({ "hooks": [handler] }));
         }
     }
+    settings
+}
+
+/// Points the hooks at `command` unless they already are; returns whether
+/// settings.json changed. Used by the HUD on every start.
+pub fn ensure(command: &str) -> Result<bool, String> {
+    let path = settings_path();
+    let settings = load(&path)?;
+    let wanted = with_hooks(settings.clone(), command);
+    if wanted == settings {
+        return Ok(false);
+    }
+    save(&path, &wanted)?;
+    Ok(true)
+}
+
+pub fn install() -> Result<(), String> {
+    let path = settings_path();
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let command = command_for(&exe, None);
+    let settings = with_hooks(load(&path)?, &command);
     save(&path, &settings)?;
     println!("Installed ClaudeHUD hooks into {}", path.display());
     println!("Hook command: {command}");

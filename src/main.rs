@@ -14,6 +14,7 @@ mod settings;
 mod sound;
 mod state;
 mod ui;
+mod update;
 
 use std::net::{SocketAddr, TcpListener};
 use std::sync::mpsc::{self, Receiver};
@@ -57,14 +58,31 @@ const DONE_SOUND_GAP: Duration = Duration::from_secs(30);
 const SOUND_GAP: Duration = Duration::from_secs(4);
 
 const SETTINGS_TITLE: &str = "ClaudeHUD – Nastavení";
-const SETTINGS_SIZE: Vec2 = vec2(640.0, 882.0);
+const SETTINGS_SIZE: Vec2 = vec2(640.0, 984.0);
 
 fn main() -> eframe::Result {
-    // Binding the port doubles as a single-instance guard.
-    let Ok(listener) = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], protocol::port()))) else {
+    // Claude Code runs `ClaudeHUD.exe hook` for every hook event.
+    if std::env::args().nth(1).as_deref() == Some("hook") {
+        claudehud::hook::run();
+        return Ok(());
+    }
+    update::remove_previous();
+
+    // Binding the port doubles as a single-instance guard. Right after an
+    // update the old copy may still hold it for a moment.
+    let addr = SocketAddr::from(([127, 0, 0, 1], protocol::port()));
+    let Some(listener) = (0..20).find_map(|attempt| {
+        if attempt > 0 {
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        TcpListener::bind(addr).ok()
+    }) else {
         return Ok(());
     };
     let state = Arc::new(Mutex::new(State::default()));
+    let hooks = std::env::current_exe()
+        .map_err(|e| e.to_string())
+        .and_then(|exe| claudehud::install::ensure(&claudehud::install::command_for(&exe, Some("hook"))));
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -84,7 +102,7 @@ fn main() -> eframe::Result {
         Box::new(move |cc| {
             ui::install_fonts(&cc.egui_ctx);
             server::spawn(listener, state.clone(), cc.egui_ctx.clone());
-            Ok(Box::new(Hud::new(state, &cc.egui_ctx)))
+            Ok(Box::new(Hud::new(state, hooks, &cc.egui_ctx)))
         }),
     )
 }
@@ -96,6 +114,7 @@ enum TrayMsg {
     Toggle,
     Open,
     Settings,
+    Uninstall,
     Quit,
 }
 
@@ -111,12 +130,15 @@ impl Tray {
         let (tx, rx) = mpsc::channel();
         let open = MenuItem::new("Zobrazit relace", true, None);
         let prefs = MenuItem::new("Nastavení", true, None);
+        let remove = MenuItem::new("Odebrat hooky a ukončit", true, None);
         let quit = MenuItem::new("Ukončit ClaudeHUD", true, None);
         let menu = Menu::new();
         let _ = menu.append(&open);
         let _ = menu.append(&prefs);
+        let _ = menu.append(&remove);
         let _ = menu.append(&quit);
-        let (open_id, prefs_id, quit_id) = (open.id().clone(), prefs.id().clone(), quit.id().clone());
+        let (open_id, prefs_id, remove_id, quit_id) =
+            (open.id().clone(), prefs.id().clone(), remove.id().clone(), quit.id().clone());
 
         // Handlers must be Send + Sync; mpsc::Sender is only Send.
         let tray_tx = Mutex::new(tx.clone());
@@ -134,6 +156,8 @@ impl Tray {
                 TrayMsg::Open
             } else if e.id == prefs_id {
                 TrayMsg::Settings
+            } else if e.id == remove_id {
+                TrayMsg::Uninstall
             } else if e.id == quit_id {
                 TrayMsg::Quit
             } else {
@@ -292,6 +316,8 @@ impl Snapshot {
 enum Upper {
     None,
     Toast(u64),
+    /// ClaudeHUD's own message: hooks installed, update available, ...
+    App,
     Panel,
 }
 
@@ -323,6 +349,10 @@ enum Action {
     OpenPanel,
     ClosePanel,
     OpenSettings,
+    InstallUpdate,
+    /// Hide the app card (until the next start or a newer version).
+    DismissApp,
+    OpenUrl(&'static str),
 }
 
 enum Pill {
@@ -340,6 +370,7 @@ struct Hud {
     settings: Settings,
     tray: Tray,
     hotkeys: Receiver<Hotkey>,
+    ctx: egui::Context,
     hwnd: Option<isize>,
     /// Logical size and physical top-left of the OS window.
     win_size: Vec2,
@@ -364,10 +395,19 @@ struct Hud {
     last_cursor: (i32, i32),
     typing_until: Option<Instant>,
     last_frame: Instant,
+    update: update::SharedUpdate,
+    /// The update version whose card was put away with "Později".
+    update_dismissed: Option<String>,
+    /// Kept so the card can fade out after it's dismissed.
+    last_app_card: Option<AppCard>,
+    /// Outcome of wiring the hooks at startup, shown once.
+    hooks_notice: Option<Result<(), String>>,
 }
 
 impl Hud {
-    fn new(state: Arc<Mutex<State>>, ctx: &egui::Context) -> Self {
+    fn new(state: Arc<Mutex<State>>, hooks: Result<bool, String>, ctx: &egui::Context) -> Self {
+        let update = update::SharedUpdate::default();
+        update::check_periodically(update.clone(), ctx.clone());
         let (tx, hotkeys) = mpsc::channel();
         let hk_tx = Mutex::new(tx);
         let hk_ctx = ctx.clone();
@@ -380,6 +420,7 @@ impl Hud {
             settings: Settings::load(),
             tray: Tray::new(ctx),
             hotkeys,
+            ctx: ctx.clone(),
             hwnd: None,
             win_size: Vec2::ZERO,
             win_origin: (0, 0),
@@ -400,6 +441,14 @@ impl Hud {
             last_cursor: (0, 0),
             typing_until: None,
             last_frame: Instant::now(),
+            update,
+            update_dismissed: None,
+            last_app_card: None,
+            hooks_notice: match hooks {
+                Ok(true) => Some(Ok(())),
+                Ok(false) => None,
+                Err(e) => Some(Err(e)),
+            },
         }
     }
 
@@ -458,6 +507,10 @@ impl Hud {
                 TrayMsg::Toggle => actions.push(Action::TogglePanel),
                 TrayMsg::Open => actions.push(Action::OpenPanel),
                 TrayMsg::Settings => actions.push(Action::OpenSettings),
+                TrayMsg::Uninstall => {
+                    let _ = claudehud::install::uninstall();
+                    ctx.send_viewport_cmd(ViewportCommand::Close);
+                }
                 TrayMsg::Quit => ctx.send_viewport_cmd(ViewportCommand::Close),
             }
         }
@@ -673,6 +726,28 @@ impl Hud {
             }
             Action::ClosePanel => self.panel_open = false,
             Action::OpenSettings => self.settings_open = true,
+            Action::InstallUpdate => {
+                drop(st);
+                let status = self.update.lock().unwrap().clone();
+                if let update::Status::Available(release) | update::Status::Failed(_, release) = status {
+                    update::install_in_background(self.update.clone(), release, self.ctx.clone());
+                }
+            }
+            Action::DismissApp => {
+                drop(st);
+                if self.hooks_notice.take().is_none() {
+                    let status = self.update.lock().unwrap().clone();
+                    match status {
+                        update::Status::Available(r) => self.update_dismissed = Some(r.version),
+                        update::Status::Failed(_, r) => {
+                            self.update_dismissed = Some(r.version.clone());
+                            *self.update.lock().unwrap() = update::Status::Available(r);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Action::OpenUrl(url) => self.ctx.open_url(egui::OpenUrl::new_tab(url)),
         }
     }
 
@@ -713,6 +788,30 @@ impl Hud {
             subtitle,
             code,
             at: n.at,
+        }
+    }
+}
+
+/// ClaudeHUD's own card, if it has something to say.
+#[derive(Clone)]
+enum AppCard {
+    Hooks(Result<(), String>),
+    Update(update::Status),
+}
+
+impl Hud {
+    fn app_card(&self) -> Option<AppCard> {
+        if let Some(notice) = &self.hooks_notice {
+            return Some(AppCard::Hooks(notice.clone()));
+        }
+        let status = self.update.lock().unwrap().clone();
+        match &status {
+            update::Status::Available(r) if self.update_dismissed.as_deref() == Some(r.version.as_str()) => None,
+            update::Status::Available(_)
+            | update::Status::Installing
+            | update::Status::Restarting
+            | update::Status::Failed(..) => Some(AppCard::Update(status)),
+            _ => None,
         }
     }
 }
@@ -1085,6 +1184,94 @@ fn draw_card(ui: &egui::Ui, rect: Rect, card: &Card, older: usize, drain: Option
     }
 }
 
+fn draw_app_card(ui: &egui::Ui, rect: Rect, card: &AppCard, time: f64, actions: &mut Vec<Action>) {
+    let p = ui.painter();
+    ui::glass(p, rect, 28.0, None);
+    let _ = ui.interact(rect, Id::new("app-card"), Sense::click());
+
+    let (title, subtitle, color) = match card {
+        AppCard::Hooks(Ok(())) => (
+            "ClaudeHUD je připojený".to_string(),
+            "Hooky jsou v Claude Code · restartuj běžící relace".to_string(),
+            ui::GREEN,
+        ),
+        AppCard::Hooks(Err(e)) => ("Hooky se nepodařilo zapsat".to_string(), e.clone(), ui::RED),
+        AppCard::Update(status) => match status {
+            update::Status::Available(r) => (
+                format!("Je tu ClaudeHUD {}", r.version),
+                format!("Máš {} · stáhne se, ověří a restartuje", update::CURRENT),
+                ui::BLUE,
+            ),
+            update::Status::Installing => ("Aktualizuji…".to_string(), "Stahuji a ověřuji kontrolní součet".to_string(), ui::BLUE),
+            update::Status::Restarting => ("Spouštím novou verzi…".to_string(), "Za chvilku jsem zpátky".to_string(), ui::BLUE),
+            update::Status::Failed(e, _) => ("Aktualizace se nepovedla".to_string(), e.clone(), ui::RED),
+            _ => (String::new(), String::new(), ui::BLUE),
+        },
+    };
+
+    // The icon tile: check, "!" or a download arrow.
+    let av = Rect::from_min_size(rect.min + vec2(14.0, 14.0), vec2(44.0, 44.0));
+    p.rect_filled(av, 13.0, color);
+    let ink = if color == ui::GREEN {
+        ui::GREEN_INK
+    } else if color == ui::RED {
+        ui::RED_INK
+    } else {
+        ui::TEXT
+    };
+    let busy = matches!(card, AppCard::Update(update::Status::Installing | update::Status::Restarting));
+    match card {
+        _ if busy => ui::spinner(p, av.center(), 22.0, 3.0, Color32::WHITE, time),
+        AppCard::Hooks(Ok(())) => ui::check(p, av.center(), 22.0, ink),
+        AppCard::Hooks(Err(_)) | AppCard::Update(update::Status::Failed(..)) => {
+            p.text(av.center(), Align2::CENTER_CENTER, "!", font(22.0, Weight::Heavy), ink);
+        }
+        _ => ui::arrow_down(p, av.center(), 22.0, ink),
+    }
+
+    let tx = av.right() + 12.0;
+    let right = rect.right() - 14.0;
+    ui::text(p, pos2(tx, av.top() + 12.5), Align2::LEFT_CENTER, &title, font(15.0, Weight::Semibold), ui::TEXT, right - tx);
+    ui::text(p, pos2(tx, av.top() + 32.5), Align2::LEFT_CENTER, &subtitle, font(13.0, Weight::Regular), ui::TEXT_2, right - tx);
+
+    let row = Rect::from_min_max(pos2(tx, av.bottom() + 10.0), pos2(right, av.bottom() + 54.0));
+    let half = (row.width() - 8.0) / 2.0;
+    let a = Rect::from_min_size(row.min, vec2(half, 44.0));
+    let b = Rect::from_min_size(row.min + vec2(half + 8.0, 0.0), vec2(half, 44.0));
+    let id = Id::new("app-card");
+    match card {
+        AppCard::Hooks(_) => {
+            if ui::button(ui, row, id.with("ok"), "Rozumím", 14.0, ButtonStyle::Glass) {
+                actions.push(Action::DismissApp);
+            }
+        }
+        AppCard::Update(update::Status::Available(_)) => {
+            if ui::button(ui, a, id.with("go"), "Aktualizovat", 14.0, ButtonStyle::Solid(ui::BLUE, ui::TEXT)) {
+                actions.push(Action::InstallUpdate);
+            }
+            if ui::button(ui, b, id.with("later"), "Později", 14.0, ButtonStyle::Glass) {
+                actions.push(Action::DismissApp);
+            }
+        }
+        AppCard::Update(update::Status::Failed(..)) => {
+            if ui::button(ui, a, id.with("web"), "Stáhnout z webu", 14.0, ButtonStyle::Solid(ui::RED, ui::RED_INK)) {
+                actions.push(Action::OpenUrl(update::RELEASES_PAGE));
+            }
+            if ui::button(ui, b, id.with("close"), "Zavřít", 14.0, ButtonStyle::Glass) {
+                actions.push(Action::DismissApp);
+            }
+        }
+        _ => {
+            // Installing: a sliding bar instead of buttons.
+            let track = Rect::from_min_size(pos2(row.left(), row.center().y - 2.0), vec2(row.width(), 4.0));
+            p.rect_filled(track, 2.0, ui::LINE_SUBTLE);
+            let w = track.width() * 0.3;
+            let x = track.left() + (track.width() - w) * (0.5 + 0.5 * (time * 2.2).sin() as f32);
+            p.rect_filled(Rect::from_min_size(pos2(x, track.top()), vec2(w, 4.0)), 2.0, ui::BLUE);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Panel
 
@@ -1240,6 +1427,8 @@ fn draw_panel(ui: &egui::Ui, rect: Rect, snap: &Snapshot, settings: &Settings, t
 
 enum Row<'a> {
     Toggle(&'a str, Option<&'a str>, Option<Color32>, &'a mut bool),
+    /// Label, value text, optional button (label, clicked).
+    Action(&'a str, String, Option<(&'a str, &'a mut bool)>),
     Collapse(&'a mut Collapse),
     Sound(&'a mut settings::Sound),
     Keys(&'a str, &'a [&'a str]),
@@ -1338,6 +1527,19 @@ fn section(ui: &egui::Ui, left: f32, width: f32, top: f32, title: &str, rows: Ve
                     changed = true;
                 }
             }
+            Row::Action(label, value, button) => {
+                p.text(pos2(r.left() + 16.0, cy), Align2::LEFT_CENTER, label, font(15.0, Weight::Medium), ui::TEXT);
+                let mut x = r.right() - 16.0;
+                if let Some((text, clicked)) = button {
+                    let w = ui::text_width(p, text, font(13.0, Weight::Bold)) + 28.0;
+                    let b = Rect::from_min_size(pos2(x - w, cy - 16.0), vec2(w, 32.0));
+                    if ui::button(ui, b, id.with("btn"), text, 13.0, ButtonStyle::Solid(ui::BLUE, ui::TEXT)) {
+                        *clicked = true;
+                    }
+                    x -= w + 12.0;
+                }
+                p.text(pos2(x, cy), Align2::RIGHT_CENTER, value, font(14.0, Weight::Regular), ui::TEXT_3);
+            }
             Row::Keys(label, keys) => {
                 p.text(pos2(r.left() + 16.0, cy), Align2::LEFT_CENTER, label, font(15.0, Weight::Medium), ui::TEXT);
                 let mut x = r.right() - 16.0;
@@ -1351,7 +1553,7 @@ fn section(ui: &egui::Ui, left: f32, width: f32, top: f32, title: &str, rows: Ve
 }
 
 /// Returns true when the window should close.
-fn draw_settings(ui: &mut egui::Ui, s: &mut Settings, scroll: &mut f32) -> bool {
+fn draw_settings(ui: &mut egui::Ui, s: &mut Settings, scroll: &mut f32, update: &update::Status, install: &mut bool) -> bool {
     let rect = ui.ctx().content_rect();
     ui::glass(ui.painter(), rect, 36.0, None);
     let inner = rect.shrink(24.0);
@@ -1394,10 +1596,22 @@ fn draw_settings(ui: &mut egui::Ui, s: &mut Settings, scroll: &mut f32) -> bool 
             Row::Toggle("Každý krok nástroje", Some("Jen v panelu, nikdy jako oznámení"), Some(ui::BLUE), &mut s.tool_steps),
             Row::Sound(&mut s.sound),
         ]);
-        section(ui, l, w, y + 22.0, "Zkratky", vec![
+        let (y, _) = section(ui, l, w, y + 22.0, "Zkratky", vec![
             Row::Keys("Přepnout na poslední hotový", &["Ctrl", "Alt", "Mezerník"]),
             Row::Keys("Otevřít panel", &["Ctrl", "Alt", "H"]),
         ]);
+        let (value, button) = match update {
+            update::Status::Checking => ("Hledám novou verzi…".to_string(), None),
+            update::Status::UpToDate => ("Aktuální".to_string(), None),
+            update::Status::Available(r) => (format!("Je tu {}", r.version), Some(("Aktualizovat", install))),
+            update::Status::Installing | update::Status::Restarting => ("Aktualizuji…".to_string(), None),
+            update::Status::Failed(..) => ("Aktualizace selhala".to_string(), Some(("Zkusit znovu", install))),
+        };
+        section(ui, l, w, y + 22.0, "O aplikaci", vec![Row::Action(
+            concat!("ClaudeHUD ", env!("CARGO_PKG_VERSION")),
+            value,
+            button,
+        )]);
     });
     if *s != before {
         s.save();
@@ -1420,11 +1634,16 @@ impl Hud {
             .with_transparent(true)
             .with_resizable(false);
         let mut close = false;
+        let mut install = false;
+        let status = self.update.lock().unwrap().clone();
         let (settings, scroll) = (&mut self.settings, &mut self.settings_scroll);
         let id = ViewportId::from_hash_of("settings");
         ctx.show_viewport_immediate(id, builder, |ui, _| {
-            close = draw_settings(ui, settings, scroll);
+            close = draw_settings(ui, settings, scroll, &status, &mut install);
         });
+        if install {
+            self.apply(Action::InstallUpdate);
+        }
         if self.settings_hwnd.is_none()
             && let Some(hwnd) = win::own_window(SETTINGS_TITLE)
         {
@@ -1491,12 +1710,18 @@ impl eframe::App for Hud {
         self.tray.update(summarize(&snap), tooltip);
 
         // What sits above the island, with a fade between changes.
+        let app_card = self.app_card();
+        if app_card.is_some() {
+            self.last_app_card = app_card.clone();
+        }
         let target = if hidden {
             Upper::None
         } else if self.panel_open {
             Upper::Panel
         } else if let Some(n) = snap.notes.first() {
             Upper::Toast(n.id)
+        } else if app_card.is_some() {
+            Upper::App
         } else {
             Upper::None
         };
@@ -1530,6 +1755,7 @@ impl eframe::App for Hud {
                 (TOAST_W, 20.0 + card_height(kind) + if older > 0 { OLDER_H } else { 0.0 })
             }
             Upper::Panel => (PANEL_W, panel_height(panel_rows(&snap).0.len())),
+            Upper::App => (TOAST_W, 130.0),
         };
         let content = vec2(pill_w.max(upper_w), PILL_H + if upper_h > 0.0 { STACK_GAP + upper_h } else { 0.0 });
         let size = if hidden { vec2(1.0, 1.0) } else { content + vec2(PAD + RIGHT_GAP, PAD + BOTTOM_GAP) };
@@ -1612,6 +1838,11 @@ impl eframe::App for Hud {
                                 draw_card(ui, r.translate(offset), card, older, drain, time, &mut actions);
                             }
                         }
+                        Upper::App => {
+                            if let Some(card) = &self.last_app_card {
+                                draw_app_card(ui, upper_rect.translate(offset), card, time, &mut actions);
+                            }
+                        }
                         Upper::None => {}
                     }
                 });
@@ -1626,6 +1857,7 @@ impl eframe::App for Hud {
         }
 
         let busy = matches!(pill, Pill::Working { .. } | Pill::Mixed { .. } | Pill::Waiting { .. })
+            || matches!(app_card, Some(AppCard::Update(update::Status::Installing | update::Status::Restarting)))
             || self.upper != Upper::None;
         ctx.request_repaint_after(Duration::from_millis(if hidden {
             250

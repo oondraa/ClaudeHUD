@@ -126,6 +126,9 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
   display: inline-flex; align-items: center; justify-content: center; height: 48px; padding: 0 22px;
   border-radius: 999px; border: 0; font: inherit; font-size: 15px; font-weight: 700; text-decoration: none; cursor: pointer;
 }
+.btn { gap: 8px; }
+.fine { margin: 0; font-size: 13px; color: var(--fg-3); }
+.fine code { font-family: var(--mono); font-size: .92em; color: var(--fg-2); }
 .btn.primary { background: var(--green); color: var(--green-ink); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
 .btn.primary:hover { color: var(--green-ink); filter: brightness(1.08); }
 .btn.lgb { font-weight: 600; }
@@ -290,6 +293,8 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius
 .keys { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 
 .install { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; align-items: start; }
+.install-side { display: grid; gap: 14px; justify-items: start; min-width: 0; }
+.install-side .term { justify-self: stretch; }
 .term { border-radius: 22px; overflow: hidden; background: rgba(0,0,0,.35); border: 1px solid var(--subtle-line); min-width: 0; }
 .term .tb { display: flex; justify-content: space-between; align-items: center; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--subtle-line); font-size: 13px; color: var(--fg-3); }
 .term .tb button { height: 32px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 600; }
@@ -325,7 +330,7 @@ footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display:
         <a href="#oznameni">Oznámení</a>
         <a href="#klid">Klid</a>
         <a href="https://github.com/oondraa/ClaudeHUD">GitHub</a>
-        <a class="cta" href="#instalace">Instalace</a>
+        <a class="cta" href="https://github.com/oondraa/ClaudeHUD/releases/latest/download/ClaudeHUD.exe">Stáhnout</a>
       </nav>
     </div>
   </div>
@@ -338,9 +343,13 @@ footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display:
         <h1>Claude dodělal. <em>Víš o tom hned.</em></h1>
         <p class="lede">ClaudeHUD je malý skleněný ostrov v pravém dolním rohu Windows, hned nad hodinami. Hlídá všechny tvoje relace Claude Code. Když některá skončí, spadne nebo chce svolení, vyjede nad ním karta. Schválíš to tam, kde právě jsi.</p>
         <div class="actions">
-          <a class="btn primary" href="#instalace">Nainstalovat</a>
+          <a class="btn primary" href="https://github.com/oondraa/ClaudeHUD/releases/latest/download/ClaudeHUD.exe">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M6 11l6 6 6-6M5 20h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Stáhnout pro Windows
+          </a>
           <a class="btn lgb" href="#stavy">Projít stavy</a>
         </div>
+        <p class="fine">Jeden soubor <code>ClaudeHUD.exe</code>, nic se neinstaluje · Windows 10 a 11 · <span id="ver">poslední verze</span></p>
       </div>
 
       <div class="demo">
@@ -487,27 +496,31 @@ footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display:
     <section class="block" id="instalace">
       <div class="heading">
         <p class="eyebrow">Instalace · Windows 10 a 11</p>
-        <h2>Tři příkazy a hotovo.</h2>
-        <p class="intro">Potřebuješ Rust a Claude Code. Instalátor přidá hooky do <code>~/.claude/settings.json</code> a předtím si udělá zálohu.</p>
+        <h2>Stáhni, spusť, hotovo.</h2>
+        <p class="intro">Potřebuješ jen Claude Code. ClaudeHUD je jeden soubor a zbytek si zařídí sám, včetně aktualizací.</p>
       </div>
       <div class="install">
-        <div class="term">
-          <div class="tb"><span>PowerShell</span><button type="button" class="lgb" id="copy">Kopírovat</button></div>
-          <pre id="cmds"><span class="c"># stažení a sestavení</span>
-git clone https://github.com/oondraa/ClaudeHUD
+        <ol class="flow">
+          <li><div><b>Stáhni <code>ClaudeHUD.exe</code>.</b> Dej ho do složky, kde zůstane, třeba do Dokumentů. Odtud se bude i aktualizovat.</div></li>
+          <li><div><b>Spusť ho.</b> Windows může u nového programu ukázat modré okno SmartScreen. Klikni na <b>Další informace</b> a pak <b>Přesto spustit</b>.</div></li>
+          <li><div><b>Sám se připojí.</b> Při prvním spuštění zapíše hooky do <code>~/.claude/settings.json</code> a předtím si udělá zálohu. Běžící relace Claude Code restartuj.</div></li>
+          <li><div><b>Sám se aktualizuje.</b> Po zapnutí se podívá na GitHub. Když je venku nová verze, ukáže kartu <b>Aktualizovat</b>. Stáhne ji, ověří kontrolní součet SHA-256 a restartuje se.</div></li>
+        </ol>
+        <div class="install-side">
+          <a class="btn primary" href="https://github.com/oondraa/ClaudeHUD/releases/latest/download/ClaudeHUD.exe">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M6 11l6 6 6-6M5 20h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Stáhnout ClaudeHUD.exe
+          </a>
+          <p class="fine"><a href="https://github.com/oondraa/ClaudeHUD/releases">Všechna vydání a kontrolní součty</a></p>
+          <div class="term">
+            <div class="tb"><span>Ze zdrojáků · PowerShell</span><button type="button" class="lgb" id="copy">Kopírovat</button></div>
+            <pre id="cmds">git clone https://github.com/oondraa/ClaudeHUD
 cd ClaudeHUD
 cargo build --release
-<span class="c"># hooky do Claude Code (se zálohou)</span>
-target\release\claudehud-hook.exe install
-<span class="c"># spuštění HUDu</span>
 target\release\claudehud.exe</pre>
+          </div>
+          <p class="fine">Hooky odebereš v nabídce ikony v oznamovací oblasti: <b>Odebrat hooky a ukončit</b>. Události jdou jen přes <code>127.0.0.1:47821</code> a nic neopouští počítač.</p>
         </div>
-        <ol class="flow">
-          <li><div><b>Hook předá událost.</b> Claude Code spustí <code>claudehud-hook.exe</code> u začátku relace, promptu, nástroje, žádosti o svolení, oznámení, konce i chyby.</div></li>
-          <li><div><b>HUD ji přijme lokálně.</b> Přes <code>127.0.0.1:47821</code>, nic neopouští počítač. Port změníš proměnnou <code>CLAUDEHUD_PORT</code>.</div></li>
-          <li><div><b>Čeká jen svolení.</b> Ostatní hooky běží asynchronně, takže Claude Code nikdy nebrzdí. Když HUD neběží, všechno funguje jako dřív.</div></li>
-          <li><div><b>Restartuj relace.</b> Běžící relace Claude Code si hooky načtou po restartu nebo příkazem <code>/hooks</code>.</div></li>
-        </ol>
       </div>
     </section>
   </div>
@@ -672,10 +685,18 @@ target\release\claudehud.exe</pre>
     });
   });
 
+  // The latest version next to the download button (offline: keep the default text).
+  try {
+    fetch('https://api.github.com/repos/oondraa/ClaudeHUD/releases/latest')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (r) { if (r && r.tag_name) document.getElementById('ver').textContent = 'verze ' + r.tag_name.replace(/^v/, ''); })
+      .catch(function () {});
+  } catch (err) { /* no network */ }
+
   // Copy the install commands.
   var copy = document.getElementById('copy');
   copy.addEventListener('click', function () {
-    var text = 'cargo build --release\ntarget\\release\\claudehud-hook.exe install\ntarget\\release\\claudehud.exe';
+    var text = 'git clone https://github.com/oondraa/ClaudeHUD\ncd ClaudeHUD\ncargo build --release\ntarget\\release\\claudehud.exe';
     var done = function () { copy.textContent = 'Zkopírováno'; setTimeout(function () { copy.textContent = 'Kopírovat'; }, 1600); };
     try {
       navigator.clipboard.writeText(text).then(done, function () { select(); });

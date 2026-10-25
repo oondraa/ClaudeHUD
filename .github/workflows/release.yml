@@ -1,0 +1,45 @@
+name: Release
+
+# Push a tag like v0.1.1 (matching Cargo.toml's version) to publish
+# ClaudeHUD.exe and SHA256SUMS.txt. Running copies offer the update on start.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check the tag matches Cargo.toml
+        shell: bash
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "Cargo.toml says $version, tag is $GITHUB_REF_NAME"; exit 1; }
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Test
+        run: cargo test --release --locked
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir dist
+          cp target/release/claudehud.exe dist/ClaudeHUD.exe
+          cd dist && sha256sum ClaudeHUD.exe > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/ClaudeHUD.exe dist/SHA256SUMS.txt \
+            --title "ClaudeHUD ${GITHUB_REF_NAME#v}" --generate-notes

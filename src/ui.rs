@@ -379,6 +379,11 @@ pub fn chevron_down(p: &Painter, c: Pos2, size: f32, color: Color32) {
     icon_path(p, c, size, &[(6.0, 9.0), (12.0, 15.0), (18.0, 9.0)], 2.5, color);
 }
 
+pub fn arrow_down(p: &Painter, c: Pos2, size: f32, color: Color32) {
+    icon_path(p, c, size, &[(12.0, 4.0), (12.0, 18.0)], 2.5, color);
+    icon_path(p, c, size, &[(6.0, 12.5), (12.0, 18.5), (18.0, 12.5)], 2.5, color);
+}
+
 pub fn chevron_right(p: &Painter, c: Pos2, size: f32, color: Color32) {
     icon_path(p, c, size, &[(9.0, 6.0), (15.0, 12.0), (9.0, 18.0)], 2.5, color);
 }

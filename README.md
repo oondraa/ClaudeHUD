@@ -9,18 +9,28 @@ When a session finishes, fails or needs permission, a card rises above the
 island so you can **Povolit / Otevřít / Zamítnout** right there, or jump to the
 session's terminal.
 
+Download `ClaudeHUD.exe` from the [latest release](https://github.com/oondraa/ClaudeHUD/releases/latest)
+and run it. On every start it points Claude Code's hooks at itself
+(`ClaudeHUD.exe hook`, in `~/.claude/settings.json`, with a backup) and checks
+GitHub for a newer release; when there is one, a card offers **Aktualizovat**:
+it downloads the exe, verifies it against `SHA256SUMS.txt`, swaps itself and
+restarts. Restart running Claude Code sessions after the first start. To remove
+the hooks, use **Odebrat hooky a ukončit** in the tray menu.
+
+From source:
+
 ```
 cargo build --release
-target\release\claudehud-hook.exe install   # adds hooks to ~/.claude/settings.json (with backup)
-target\release\claudehud.exe                # start the HUD
+target\release\claudehud.exe
 ```
 
-Restart running Claude Code sessions after installing. To remove the hooks, run
-`claudehud-hook.exe uninstall`.
+To publish a release, bump `version` in `Cargo.toml` and push a matching tag
+(`v0.1.1`); the Release workflow builds and uploads `ClaudeHUD.exe` and
+`SHA256SUMS.txt`.
 
 ## How it works
 
-- `claudehud-hook.exe` is registered as a Claude Code command hook for
+- `ClaudeHUD.exe hook` is registered as a Claude Code command hook for
   `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`,
   `Notification`, `Stop`, `StopFailure` and `SessionEnd`. It forwards the event JSON, plus the
   terminal window it runs under (found by walking up the parent processes), to
