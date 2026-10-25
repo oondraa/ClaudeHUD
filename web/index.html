@@ -466,7 +466,7 @@ footer { padding-block: 80px 48px; color: var(--fg-3); font-size: 13px; display:
       </div>
       <div class="quiet">
         <div class="group" role="group" aria-label="Nastavení ostrova">
-          <div class="it"><div><b>Proklikávací</b><span>Kliky projdou do okna pod ním, dokud nepodržíš Alt</span></div><button type="button" class="sw" aria-pressed="true" aria-label="Proklikávací"></button></div>
+          <div class="it"><div><b>Proklikávací</b><span>Kliky projdou do okna pod ním, dokud nepodržíš Alt</span></div><button type="button" class="sw" aria-pressed="false" aria-label="Proklikávací"></button></div>
           <div class="it"><div><b>Ztlumit při psaní</b><span>Když píšeš, ostrov zprůhlední na 30 %</span></div><button type="button" class="sw" aria-pressed="true" aria-label="Ztlumit při psaní"></button></div>
           <div class="it"><div><b>Skrýt při celé obrazovce</b><span>Hry a video — oznámení počkají</span></div><button type="button" class="sw" aria-pressed="true" aria-label="Skrýt při celé obrazovce"></button></div>
           <div class="it"><div><b>Sbalit oznámení po</b></div>
@@ -603,7 +603,7 @@ target\release\claudehud.exe</pre>
           '<div class="prow done"><div class="av lg40 c-oz">OZ</div><div class="txt"><div class="nm"><b>OZBEAT</b><span class="tag" style="color:var(--green)">HOTOVO · 6:12</span></div><div class="det">Build skript upraven, 4 soubory změněny</div></div><button type="button" class="pb solid g" data-act="work">Přepnout</button></div>' +
           '<div class="prow wait"><div class="av lg40 c-ch">CH</div><div class="txt"><div class="nm"><b>ClaudeHUD</b><span class="pdot pulse" style="width:7px;height:7px"></span><span class="tag" style="color:var(--amber)">ČEKÁ NA VSTUP · ' + since(123) + '</span></div><div class="det">Spustil jsem claudehud.exe — mám pokračovat?</div></div><button type="button" class="pb solid a" data-act="perm">Odpovědět</button></div>' +
           '<div class="prow"><div class="av lg40 c-op">OP</div><div class="txt"><div class="nm"><b>opensisakhk</b>' + spinner(12, '#409CFF', 3) + '<span class="tag" style="color:var(--blue-tag)">PRACUJE · ' + since(768) + '</span></div><div class="det mono">Bash: cd Projekty/Opensisakhk &amp;&amp; cargo test</div></div><button type="button" class="pb lgb">Otevřít</button></div>' +
-          '<div class="pf"><span>Ostrov propouští kliky, dokud nepodržíš Alt</span><span>Ctrl + Alt + H</span></div>' +
+          '<div class="pf"><span>Kliky mimo HUD procházejí do oken pod ním</span><span>Ctrl + Alt + H</span></div>' +
         '</div></div>' +
         '<button type="button" class="pill lg p-wait" data-act="work"><span class="pdot pulse"></span><span class="lbl">ClaudeHUD čeká</span><span class="t amber">' + since(123) + '</span></button>';
     }

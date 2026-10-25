@@ -46,8 +46,8 @@ To publish a release, bump `version` in `Cargo.toml` and push a matching tag
 - **Island** (bottom-right): resting it is three faint dots; otherwise it shows
   the most urgent state — waiting (pulsing amber, with how long), finished
   (green, with **Přepnout**), failed (red), or working (spinner, longest run,
-  avatars). By default it lets clicks through to the window below; hold **Alt**
-  to click it. Click it to open the panel.
+  avatars). Click it to open the panel. Optionally (**Proklikávací**) it lets
+  clicks through to the window below unless **Alt** is held.
 - **Cards**: finished / waiting / failed cards fold away after 8 s (pauses
   while hovered; configurable), older ones stack behind. Permission cards stay
   until answered; **Otevřít** falls back to the prompt in the terminal.

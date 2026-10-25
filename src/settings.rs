@@ -65,7 +65,9 @@ impl Sound {
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// The resting island lets clicks through unless Alt is held.
+    /// The resting island lets clicks through unless Alt is held. Off by
+    /// default; stored under a new key so the old default-on value is dropped.
+    #[serde(rename = "pass_clicks")]
     pub click_through: bool,
     pub dim_while_typing: bool,
     pub hide_fullscreen: bool,
@@ -81,7 +83,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            click_through: true,
+            click_through: false,
             dim_while_typing: true,
             hide_fullscreen: true,
             collapse: Collapse::S8,
