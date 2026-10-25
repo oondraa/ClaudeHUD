@@ -50,8 +50,9 @@ const PANEL_W: f32 = 520.0;
 const PANEL_MAX_ROWS: usize = 6;
 /// The panel closes this long after the cursor last left it.
 const PANEL_LINGER: Duration = Duration::from_secs(4);
-/// How long after the last keystroke the HUD stays dimmed.
-const TYPING_LINGER: Duration = Duration::from_millis(1200);
+/// How long after the last keystroke the HUD stays dimmed; long enough to
+/// bridge the pauses between words.
+const TYPING_LINGER: Duration = Duration::from_millis(2500);
 /// Sound throttling: a "done" chime never follows another sound within 30 s
 /// (agents finishing in a burst give one chime), anything else within 4 s.
 const DONE_SOUND_GAP: Duration = Duration::from_secs(30);
@@ -391,8 +392,10 @@ struct Hud {
     last_sound: Option<Instant>,
     /// A sound held back while a full-screen app is in front.
     deferred_tone: Option<Tone>,
-    last_input: u32,
-    last_cursor: (i32, i32),
+    key_presses: u32,
+    /// Current opacity from typing and from an idle pill, eased by [`fade`].
+    dim: f32,
+    idle_dim: f32,
     typing_until: Option<Instant>,
     last_frame: Instant,
     update: update::SharedUpdate,
@@ -437,8 +440,9 @@ impl Hud {
             card_elapsed: 0.0,
             last_sound: None,
             deferred_tone: None,
-            last_input: 0,
-            last_cursor: (0, 0),
+            key_presses: win::key_presses(),
+            dim: 1.0,
+            idle_dim: 1.0,
             typing_until: None,
             last_frame: Instant::now(),
             update,
@@ -486,17 +490,13 @@ impl Hud {
         pos2((x - self.win_origin.0) as f32 / ppp, (y - self.win_origin.1) as f32 / ppp)
     }
 
-    /// Keyboard activity without mouse movement counts as typing.
+    /// A key pressed anywhere recently (see [`win::key_presses`]).
     fn track_typing(&mut self) -> bool {
-        let tick = win::last_input_tick();
-        let cursor = win::cursor_pos();
-        if tick != self.last_input {
-            if cursor == self.last_cursor {
-                self.typing_until = Some(Instant::now() + TYPING_LINGER);
-            }
-            self.last_input = tick;
+        let presses = win::key_presses();
+        if presses != self.key_presses {
+            self.key_presses = presses;
+            self.typing_until = Some(Instant::now() + TYPING_LINGER);
         }
-        self.last_cursor = cursor;
         self.typing_until.is_some_and(|t| Instant::now() < t)
     }
 
@@ -1661,6 +1661,14 @@ impl Hud {
 // ---------------------------------------------------------------------------
 // Frame
 
+/// Moves an opacity towards `target`: quick to dim, slower to come back, so
+/// the island fades instead of blinking.
+fn fade(current: f32, target: f32, dt: f32) -> f32 {
+    let per_second = if target < current { 0.7 / 0.15 } else { 0.7 / 0.4 };
+    let step = per_second * dt;
+    if (target - current).abs() <= step { target } else { current + step * (target - current).signum() }
+}
+
 /// The most urgent state across sessions, for the tray icon.
 fn summarize(snap: &Snapshot) -> Option<Status> {
     let has = |k: Kind| snap.views.iter().any(|v| v.kind == k);
@@ -1815,9 +1823,15 @@ impl eframe::App for Hud {
 
         // Draw.
         let mut actions = Vec::new();
+        let mut fading = false;
         if !hidden {
-            let dim = if self.settings.dim_while_typing && typing && !self.panel_open && !over_upper && !over_pill { 0.3 } else { 1.0 };
-            let pill_opacity = if pill_l.idle && !over_pill && !alt { 0.3 } else { 1.0 };
+            let dim_target =
+                if self.settings.dim_while_typing && typing && !self.panel_open && !over_upper && !over_pill { 0.3 } else { 1.0 };
+            let idle_target = if pill_l.idle && !over_pill && !alt { 0.3 } else { 1.0 };
+            self.dim = fade(self.dim, dim_target, dt);
+            self.idle_dim = fade(self.idle_dim, idle_target, dt);
+            fading = self.dim != dim_target || self.idle_dim != idle_target;
+            let (dim, pill_opacity) = (self.dim, self.idle_dim);
             ui.scope(|ui| {
                 ui.multiply_opacity(dim * pill_opacity);
                 draw_pill(ui, pill_rect, &pill_l, &pill, time, &mut actions);
@@ -1861,7 +1875,7 @@ impl eframe::App for Hud {
             || self.upper != Upper::None;
         ctx.request_repaint_after(Duration::from_millis(if hidden {
             250
-        } else if animating {
+        } else if animating || fading {
             8
         } else if busy {
             33

@@ -1,6 +1,7 @@
 //! Win32 helpers: locate the terminal window hosting a process, bring it to front.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use windows_sys::Win32::Foundation::{CloseHandle, HWND, INVALID_HANDLE_VALUE, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Dwm::{
@@ -8,19 +9,22 @@ use windows_sys::Win32::Graphics::Dwm::{
     DwmSetWindowAttribute,
 };
 use windows_sys::Win32::System::Console::GetConsoleWindow;
+use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Diagnostics::Debug::MessageBeep;
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, GetLastInputInfo, KEYEVENTF_KEYUP, LASTINPUTINFO, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT,
-    RegisterHotKey, VK_H, VK_MENU, VK_SPACE, keybd_event,
+    GetAsyncKeyState, KEYEVENTF_KEYUP, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, RegisterHotKey, VK_CAPITAL, VK_CONTROL,
+    VK_H, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_RCONTROL, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT,
+    VK_SPACE, keybd_event,
 };
 use windows_sys::Win32::UI::Shell::{
     DefSubclassProc, SetWindowSubclass, QUNS_BUSY, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, EnumWindows, GW_OWNER, GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetMessageW,
+    BringWindowToTop, CallNextHookEx, EnumWindows, KBDLLHOOKSTRUCT, SetWindowsHookExW, WH_KEYBOARD_LL, WM_KEYDOWN,
+    WM_SYSKEYDOWN, GW_OWNER, GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetMessageW,
     GetWindow, GetWindowLongPtrW, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindow,
     GetWindowTextW, HWND_TOPMOST, IsWindowVisible, MB_ICONASTERISK, MSG, SPI_GETWORKAREA, SW_RESTORE,
     SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, SystemParametersInfoW,
@@ -240,10 +244,27 @@ pub fn alt_down() -> bool {
 }
 
 /// Tick count of the last keyboard/mouse input anywhere in the session.
-pub fn last_input_tick() -> u32 {
-    let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
-    unsafe { GetLastInputInfo(&mut info) };
-    info.dwTime
+/// Counts key presses anywhere in the system, modifiers excluded (holding
+/// Alt to click the island is not typing). Mouse and wheel input never count.
+static KEY_PRESSES: AtomicU32 = AtomicU32::new(0);
+
+pub fn key_presses() -> u32 {
+    KEY_PRESSES.load(Ordering::Relaxed)
+}
+
+unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code >= 0 && matches!(wparam as u32, WM_KEYDOWN | WM_SYSKEYDOWN) {
+        let vk = unsafe { (*(lparam as *const KBDLLHOOKSTRUCT)).vkCode } as u16;
+        let modifier = matches!(
+            vk,
+            VK_SHIFT | VK_LSHIFT | VK_RSHIFT | VK_CONTROL | VK_LCONTROL | VK_RCONTROL | VK_MENU | VK_LMENU
+                | VK_RMENU | VK_LWIN | VK_RWIN | VK_CAPITAL
+        );
+        if !modifier {
+            KEY_PRESSES.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }
 }
 
 /// A full-screen game, video or presentation is in front.
@@ -272,6 +293,8 @@ pub fn spawn_hotkeys(on_key: impl Fn(Hotkey) + Send + 'static) {
         let mods = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
         RegisterHotKey(std::ptr::null_mut(), 1, mods, VK_SPACE as u32);
         RegisterHotKey(std::ptr::null_mut(), 2, mods, VK_H as u32);
+        // This thread pumps messages, which a low-level hook needs.
+        SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_hook), GetModuleHandleW(std::ptr::null()), 0);
         let mut msg: MSG = std::mem::zeroed();
         while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
             if msg.message == WM_HOTKEY {
