@@ -1021,7 +1021,7 @@ fn draw_pill(ui: &egui::Ui, rect: Rect, l: &PillLayout, pill: &Pill, time: f64, 
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
     let p = ui.painter();
-    ui::glass(p, rect, rect.height() / 2.0, l.border);
+    ui::bar(p, rect, l.border);
     let cy = rect.center().y;
     if l.idle {
         for i in 0..3 {
@@ -1784,6 +1784,9 @@ impl eframe::App for Hud {
         let over_upper = self.upper != Upper::None && upper_rect.contains(cursor);
         let pill_through = self.settings.click_through && !alt;
         let through = hidden || !(over_upper || (over_pill && !pill_through));
+        if let Some(hwnd) = self.hwnd {
+            win::keep_overlay(hwnd);
+        }
         if self.click_through != Some(through)
             && let Some(hwnd) = self.hwnd
         {

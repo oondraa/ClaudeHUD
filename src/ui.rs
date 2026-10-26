@@ -222,6 +222,17 @@ pub fn glass(p: &Painter, rect: Rect, r: f32, border: Option<Color32>) {
     p.rect_stroke(rect, r, Stroke::new(1.0, border.unwrap_or(GLASS_BORDER)), StrokeKind::Inside);
 }
 
+/// Calm11's dock and clock bar (VidleUITweaker), so the island sits next to
+/// them as one family: flat, 80 % opaque, hairline border, 18 px corners.
+const BAR_FILL: Color32 = rgba(0x1E, 0x1F, 0x24, 204);
+const BAR_BORDER: Color32 = white(0.14);
+pub const BAR_RADIUS: f32 = 18.0;
+
+pub fn bar(p: &Painter, rect: Rect, border: Option<Color32>) {
+    p.rect_filled(rect, BAR_RADIUS, BAR_FILL);
+    p.rect_stroke(rect, BAR_RADIUS, Stroke::new(1.0, border.unwrap_or(BAR_BORDER)), StrokeKind::Inside);
+}
+
 // ---------------------------------------------------------------------------
 // Controls
 

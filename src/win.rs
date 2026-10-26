@@ -321,13 +321,23 @@ unsafe extern "system" fn full_client_area(
 /// Makes a window a non-activating tool window: clicking it never steals focus
 /// from whatever the user is typing in, and it stays out of Alt+Tab.
 pub fn make_overlay(hwnd: isize) {
+    keep_overlay(hwnd);
+    undecorate(hwnd);
+}
+
+/// Restores the overlay bits when winit has rebuilt the extended style (it
+/// does, e.g. on focus and visibility changes). Without them the island turns
+/// back into an app window, which docks that list windows the way the taskbar
+/// does (Calm11) show as a running app.
+pub fn keep_overlay(hwnd: isize) {
     let hwnd = hwnd as HWND;
     unsafe {
         let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        let style = (style | (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) as isize) & !(WS_EX_APPWINDOW as isize);
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style);
+        let fixed = (style | (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) as isize) & !(WS_EX_APPWINDOW as isize);
+        if fixed != style {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, fixed);
+        }
     }
-    undecorate(hwnd as isize);
 }
 
 /// Desktop work area of the primary monitor (excludes the taskbar), in
